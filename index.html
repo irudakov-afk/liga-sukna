@@ -22,6 +22,7 @@
       document.head.insertBefore(b, document.head.firstChild);
     })();
   </script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -202,5 +203,15 @@
   <script src="storage.js"></script>
   <script src="tournament.js"></script>
   <script src="app.js"></script>
+  <script>
+  if (window.Telegram && Telegram.WebApp) {
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    // подстроить цвета под тему Telegram (опционально)
+    document.documentElement.style.setProperty(
+      '--bg', Telegram.WebApp.themeParams.bg_color || '#0c1914'
+    );
+  }
+</script>
 </body>
 </html>
