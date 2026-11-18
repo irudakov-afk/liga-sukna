@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0c1914">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Лига Сукна</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    // GitHub Pages project sites need a correct base path
+    (function () {
+      var p = location.pathname;
+      if (p.endsWith('index.html')) p = p.slice(0, -10);
+      if (p.endsWith('/')) p = p.slice(0, -1);
+      // project page: /repo-name  → base = /repo-name/
+      // user page or local: / or empty → base = /
+      var basePath = p && p !== '/' ? p + '/' : '/';
+      var b = document.createElement('base');
+      b.href = basePath;
+      document.head.insertBefore(b, document.head.firstChild);
+    })();
+  </script>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- INTRO -->
+  <div id="intro-overlay" aria-hidden="true">
+    <div class="intro-table"></div>
+    <div class="intro-cue-ball"></div>
+    <div class="intro-rack" id="intro-rack"></div>
+    <div class="intro-title">Лига Сукна</div>
+  </div>
+
+  <!-- SCREENS -->
+  <div id="app">
+    <!-- HOME -->
+    <section id="screen-home" class="screen active">
+      <header class="home-header">
+        <div class="logo-mark">8</div>
+        <div>
+          <h1>Лига Сукна</h1>
+          <p class="tagline">Споры между своими</p>
+        </div>
+      </header>
+
+      <div id="me-badge" class="me-badge"></div>
+      <div class="section-label">Выбери стол</div>
+      <div class="sport-grid" id="sport-grid">
+        <!-- filled by JS -->
+      </div>
+
+      <div class="home-footer">
+        <button class="ghost-btn" id="btn-open-stats">Статистика игроков</button>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="screen-setup" class="screen">
+      <header class="screen-header">
+        <button class="back-btn" data-back="home">←</button>
+        <h2 id="setup-title">Новый турнир</h2>
+      </header>
+
+      <div class="setup-body">
+        <div class="field-block">
+          <label>Формат</label>
+          <div class="chip-row" id="format-chips">
+            <button class="chip active" data-format="round-robin">Круговая (каждый с каждым)</button>
+            <button class="chip" data-format="group-de">Группа + DE (только 4)</button>
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label>Ставка за проигрыш</label>
+          <div class="bet-row">
+            <input type="number" id="setup-bet" value="1000" min="0" step="100" inputmode="numeric">
+            <span class="currency">₽</span>
+            <div class="quick-bets">
+              <button type="button" data-bet="500">500</button>
+              <button type="button" data-bet="1000">1000</button>
+              <button type="button" data-bet="2000">2000</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label>Участники (минимум 2)</label>
+          <div class="player-count-row">
+            <button type="button" class="chip" id="btn-remove-player">− игрок</button>
+            <button type="button" class="chip" id="btn-add-player">+ игрок</button>
+          </div>
+          <div id="player-inputs" class="player-inputs"></div>
+          <p class="hint" style="margin-top:8px">Можно указать Telegram ID — тогда статистика привяжется к аккаунту. Узнать свой ID: @userinfobot</p>
+          <div class="suggest-row" id="suggest-row"></div>
+        </div>
+
+        <button class="primary-btn" id="btn-start-tournament">Начать турнир</button>
+      </div>
+    </section>
+
+    <!-- TOURNAMENT -->
+    <section id="screen-tournament" class="screen">
+      <header class="t-header">
+        <button class="icon-btn" id="btn-menu-t">☰</button>
+        <div class="t-header-center">
+          <div class="t-title">Лига Бильярда 4×4</div>
+          <div class="t-sub">Группа + Double Elimination</div>
+        </div>
+        <div class="t-bank">
+          <div class="bank-label">Призовой</div>
+          <div class="bank-value" id="bank-value">0 ₽</div>
+        </div>
+      </header>
+
+      <div class="t-scroll">
+        <!-- Current ranking -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>🏆 Текущий рейтинг</h3>
+          </div>
+          <table class="rank-table">
+            <thead><tr><th>#</th><th>Игрок</th><th>Очки</th><th>Итог</th></tr></thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Debts -->
+        <div class="panel">
+          <div class="panel-head debts-head">
+            <h3>💸 Проигранные матчи</h3>
+            <span class="debts-count" id="debts-count">0 матчей</span>
+            <button class="text-btn" id="debtsToggle">Развернуть</button>
+          </div>
+          <div class="debts-body" id="debtsBody">
+            <div id="debts-list"></div>
+          </div>
+        </div>
+
+        <!-- Group stage -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>🏓 Групповой этап</h3>
+          </div>
+          <div class="group-matrix" id="group-matrix"></div>
+          <p class="hint">Клик по ячейке = игрок из строки выиграл у игрока из столбца</p>
+        </div>
+
+        <div id="playoff-panel">
+        <!-- Winner Bracket -->
+        <div class="panel">
+          <div class="panel-head"><h3>🏆 Верхняя сетка</h3></div>
+          <div class="bracket" id="bracket-wb"></div>
+        </div>
+
+        <!-- Loser Bracket -->
+        <div class="panel">
+          <div class="panel-head"><h3>📉 Нижняя сетка</h3></div>
+          <div class="bracket" id="bracket-lb"></div>
+        </div>
+        </div><!-- playoff-panel -->
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section id="screen-stats" class="screen">
+      <header class="screen-header">
+        <button class="back-btn" data-back="home">←</button>
+        <h2>Статистика</h2>
+      </header>
+      <div class="stats-body" id="stats-body">
+        <!-- filled by JS -->
+      </div>
+    </section>
+  </div>
+
+  <!-- FINAL MODAL -->
+  <div class="overlay" id="finalOverlay">
+    <div class="modal final-modal">
+      <h2>🏅 Итоги турнира</h2>
+      <div class="subtitle">Призовые и звания</div>
+      <div id="final-list"></div>
+      <div class="final-summary">
+        <h4>Финансовый итог</h4>
+        <div id="final-summary-body"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="btn-close-final">Закрыть</button>
+        <button class="danger-btn" id="btn-new-from-final">Новый турнир</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM / MENU -->
+  <div class="overlay" id="menuOverlay">
+    <div class="modal menu-modal">
+      <button class="menu-item" id="menu-stats">📊 Статистика</button>
+      <button class="menu-item danger" id="menu-new">🔄 Начать новый турнир</button>
+      <button class="menu-item" id="menu-close">Закрыть</button>
+    </div>
+  </div>
+
+  <div class="sync-badge" id="toast">Сохранено</div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="storage.js"></script>
+  <script src="tournament.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
