@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0c1914">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Лига Сукна</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (function () {
+      var p = location.pathname;
+      if (p.endsWith('index.html')) p = p.slice(0, -10);
+      if (p.endsWith('/')) p = p.slice(0, -1);
+      var basePath = p && p !== '/' ? p + '/' : '/';
+      var b = document.createElement('base');
+      b.href = basePath;
+      document.head.insertBefore(b, document.head.firstChild);
+    })();
+  </script>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- HOME -->
+    <section id="screen-home" class="screen active">
+      <header class="home-header">
+        <div class="logo-mark">8</div>
+        <div>
+          <h1>Лига Сукна</h1>
+          <p class="tagline">Споры между своими</p>
+        </div>
+      </header>
+      <div id="me-badge" class="me-badge"></div>
+      <div id="api-badge" class="api-badge"></div>
+      <div class="section-label">Выбери стол</div>
+      <div class="sport-grid" id="sport-grid"></div>
+      <div class="home-footer">
+        <button class="ghost-btn" id="btn-open-stats">Статистика</button>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="screen-setup" class="screen">
+      <header class="screen-header">
+        <button class="back-btn" data-back="home">←</button>
+        <h2 id="setup-title">Новая встреча</h2>
+      </header>
+      <div class="setup-body">
+        <div class="field-block">
+          <label>Формат</label>
+          <div class="chip-row" id="format-chips">
+            <button type="button" class="chip active" data-format="h2h">Игра 1 на 1</button>
+            <button type="button" class="chip" data-format="tournament">Турнир 4×4 + DE</button>
+          </div>
+        </div>
+        <div class="field-block" id="bet-block">
+          <label>Ставка за проигрыш (турнир)</label>
+          <div class="bet-row">
+            <input type="number" id="setup-bet" value="1000" min="0" step="100" inputmode="numeric">
+            <span class="currency">₽</span>
+            <div class="quick-bets">
+              <button type="button" data-bet="500">500</button>
+              <button type="button" data-bet="1000">1000</button>
+              <button type="button" data-bet="2000">2000</button>
+            </div>
+          </div>
+        </div>
+        <div class="field-block">
+          <label id="players-label">Участники</label>
+          <div id="player-inputs" class="player-inputs"></div>
+          <p class="hint">Имя — для отображения. Telegram ID — для статистики (узнать: @userinfobot).</p>
+          <div class="suggest-row" id="suggest-row"></div>
+        </div>
+        <button class="primary-btn" id="btn-start">Начать</button>
+      </div>
+    </section>
+
+    <!-- H2H MATCH -->
+    <section id="screen-h2h" class="screen">
+      <header class="t-header">
+        <button class="icon-btn" id="btn-h2h-back">←</button>
+        <div class="t-header-center">
+          <div class="t-title" id="h2h-title">1 на 1</div>
+          <div class="t-sub" id="h2h-sub"></div>
+        </div>
+        <div class="t-bank"><div class="bank-label">Счёт</div><div class="bank-value" id="h2h-score">0 : 0</div></div>
+      </header>
+      <div class="t-scroll">
+        <div class="panel">
+          <div class="panel-head"><h3>Партии</h3></div>
+          <div id="h2h-games"></div>
+          <div id="h2h-current" class="h2h-current"></div>
+          <div class="h2h-actions" id="h2h-actions" style="display:none">
+            <button class="primary-btn" id="btn-h2h-next">Ещё партия</button>
+            <button class="ghost-btn" id="btn-h2h-end">Закончить встречу</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOURNAMENT -->
+    <section id="screen-tournament" class="screen">
+      <header class="t-header">
+        <button class="icon-btn" id="btn-menu-t">☰</button>
+        <div class="t-header-center">
+          <div class="t-title" id="t-title">Турнир</div>
+          <div class="t-sub">Группа + Double Elimination</div>
+        </div>
+        <div class="t-bank">
+          <div class="bank-label">Призовой</div>
+          <div class="bank-value" id="bank-value">0 ₽</div>
+        </div>
+      </header>
+      <div class="t-scroll">
+        <div class="panel">
+          <div class="panel-head"><h3>🏆 Рейтинг</h3></div>
+          <table class="rank-table">
+            <thead><tr><th>#</th><th>Игрок</th><th>Очки</th><th>Итог</th></tr></thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head debts-head">
+            <h3>💸 Проигрыши</h3>
+            <span class="debts-count" id="debts-count">0</span>
+            <button class="text-btn" id="debtsToggle">Развернуть</button>
+          </div>
+          <div class="debts-body" id="debtsBody"><div id="debts-list"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>🏓 Группа</h3></div>
+          <div class="group-matrix" id="group-matrix"></div>
+          <p class="hint">Клик: игрок строки выиграл у игрока столбца</p>
+        </div>
+        <div id="playoff-panel">
+          <div class="panel">
+            <div class="panel-head"><h3>🏆 Верхняя сетка</h3></div>
+            <div class="bracket" id="bracket-wb"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>📉 Нижняя сетка</h3></div>
+            <div class="bracket" id="bracket-lb"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section id="screen-stats" class="screen">
+      <header class="screen-header">
+        <button class="back-btn" data-back="home">←</button>
+        <h2>Статистика</h2>
+      </header>
+      <div class="stats-body" id="stats-body"></div>
+    </section>
+  </div>
+
+  <div class="overlay" id="finalOverlay">
+    <div class="modal final-modal">
+      <h2>🏅 Итоги</h2>
+      <div id="final-list"></div>
+      <div class="final-summary"><h4>Финансы</h4><div id="final-summary-body"></div></div>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="btn-close-final">Закрыть</button>
+        <button class="danger-btn" id="btn-new-from-final">Новая встреча</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="menuOverlay">
+    <div class="modal menu-modal">
+      <button class="menu-item" id="menu-stats">📊 Статистика</button>
+      <button class="menu-item danger" id="menu-new">🔄 Новая встреча</button>
+      <button class="menu-item" id="menu-close">Закрыть</button>
+    </div>
+  </div>
+
+  <div class="sync-badge" id="toast">Сохранено</div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="storage.js"></script>
+  <script src="tournament.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
