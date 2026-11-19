@@ -1,6 +1,5 @@
 /* =====================================================
    Лига Сукна — Premium theme
-   Палитра: чёрный изумруд + шампанское золото
    ===================================================== */
 :root {
   --bg: #050d0a;
@@ -45,93 +44,31 @@ body {
 }
 
 /* =====================================================
-   INTRO 3D: подлёт → удар → шар в лузу → камера в лузу
-   Раскладка: .intro-table 280×520, .intro-felt 240×480.
-   Шары .ibl создаются в app.js и получают координаты
-   left/top + переменные --dx/--dy/--mid-x/--mid-y/--rot.
-   Вся анимация — CSS, JS только собирает DOM.
+   INTRO — вся анимация строится в JS (rAF).
+   CSS только рисует статичную сцену: рамку, сукно, лузы,
+   кий, шары. Никаких @keyframes на шарах и камере.
    ===================================================== */
 #intro {
   position: fixed; inset: 0; z-index: 9999;
   background: #020605;
   overflow: hidden;
-  perspective: 1200px;
-  perspective-origin: 50% 42%;
+  opacity: 1;
+  transition: opacity 0.35s ease;
 }
-#intro.done { pointer-events: none; }
-#intro.skip .intro-world,
-#intro.skip .intro-title,
-#intro.skip .intro-tag { opacity: 0 !important; transition: opacity 0.25s ease; }
-#intro.skip .intro-fade { opacity: 1 !important; animation: none; }
+#intro.hide { opacity: 0; pointer-events: none; }
 
-.intro-world {
+.intro-stage {
   position: absolute; inset: 0;
-  transform-style: preserve-3d;
   display: flex; align-items: center; justify-content: center;
-  animation: worldHold 5.4s linear forwards;
-}
-@keyframes worldHold {
-  0%, 88% { opacity: 1; }
-  100% { opacity: 0; }
+  perspective: 1400px;
+  perspective-origin: 50% 45%;
 }
 
 .intro-camera {
-  position: relative;
   width: 280px; height: 520px;
   transform-style: preserve-3d;
-  transform-origin: 50% 72%;
+  transform-origin: 50% 50%;
   will-change: transform;
-  animation: camSequence 5.2s cubic-bezier(0.4, 0.05, 0.2, 1) forwards;
-}
-/*
-  Камера в локальных координатах стола:
-  0–18%   дальний подлёт к битку
-  18–28%  стабилизация над битком, момент удара
-  28–40%  отслеживание разбивки, чуть выше
-  40–72%  ведёт целевой шар к верхней-левой лузе
-  72–100% нырок в лузу (scale + погружение в темноту)
-*/
-@keyframes camSequence {
-  0% {
-    transform:
-      translate3d(18px, 90px, -1600px)
-      rotateX(68deg) rotateZ(-28deg) scale(0.55);
-  }
-  18% {
-    transform:
-      translate3d(8px, 40px, -520px)
-      rotateX(58deg) rotateZ(-10deg) scale(0.9);
-  }
-  28% {
-    transform:
-      translate3d(4px, 18px, -180px)
-      rotateX(52deg) rotateZ(-3deg) scale(1.05);
-  }
-  40% {
-    transform:
-      translate3d(-6px, 8px, -40px)
-      rotateX(48deg) rotateZ(2deg) scale(1.12);
-  }
-  55% {
-    transform:
-      translate3d(-70px, -120px, 80px)
-      rotateX(42deg) rotateZ(8deg) scale(1.35);
-  }
-  72% {
-    transform:
-      translate3d(-118px, -210px, 220px)
-      rotateX(28deg) rotateZ(14deg) scale(1.9);
-  }
-  88% {
-    transform:
-      translate3d(-132px, -248px, 480px)
-      rotateX(8deg) rotateZ(6deg) scale(3.4);
-  }
-  100% {
-    transform:
-      translate3d(-140px, -260px, 900px)
-      rotateX(-12deg) rotateZ(0deg) scale(6.5);
-  }
 }
 
 .intro-table {
@@ -139,11 +76,10 @@ body {
   width: 280px; height: 520px;
   border-radius: 28px;
   transform-style: preserve-3d;
-  background:
-    linear-gradient(145deg, #7a5228 0%, #3d2410 42%, #2a180a 58%, #6a4520 100%);
+  background: linear-gradient(145deg, #7a5228 0%, #3d2410 42%, #2a180a 58%, #6a4520 100%);
   box-shadow:
     0 0 0 2px #140c05,
-    0 0 0 4px rgba(226, 194, 125, 0.35),
+    0 0 0 5px rgba(226, 194, 125, 0.35),
     0 50px 80px rgba(0,0,0,0.75),
     inset 0 2px 4px rgba(255,255,255,0.18);
 }
@@ -161,18 +97,16 @@ body {
   position: absolute;
   left: 20px; top: 20px; right: 20px; bottom: 20px;
   border-radius: 12px;
-  transform-style: preserve-3d;
-  background:
-    radial-gradient(ellipse at 50% 35%, #2ea56a 0%, #187546 50%, #0a3d26 100%);
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #2ea56a 0%, #187546 50%, #0a3d26 100%);
   box-shadow:
     inset 0 0 40px rgba(0,0,0,0.55),
     inset 0 0 0 2px rgba(0,0,0,0.45);
-  overflow: hidden;
 }
 .intro-felt::after {
   content: '';
   position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 28%, rgba(255,255,220,0.18), transparent 60%);
+  background: radial-gradient(ellipse at 50% 28%, rgba(255,255,220,0.16), transparent 60%);
 }
 
 /* лузы */
@@ -192,131 +126,65 @@ body {
 .ipk.p4 { right: -14px; top: calc(50% - 17px); }
 .ipk.p5 { left: -12px; bottom: -12px; }
 .ipk.p6 { right: -12px; bottom: -12px; }
-
-/* целевая луза подсвечивается к моменту, когда туда летит шар */
-.ipk.p1 {
-  animation: pocketGlow 5.2s ease forwards;
-}
-@keyframes pocketGlow {
-  0%, 55% { box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 0 2px rgba(30,18,8,0.9); }
-  70%, 85% { box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 18px 4px rgba(226,194,125,0.45); }
-  100% { box-shadow: inset 0 0 30px #000, 0 0 40px 8px rgba(0,0,0,0.9); }
+.ipk.hot {
+  box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 0 2px rgba(30,18,8,0.9),
+              0 0 20px 5px rgba(226,194,125,0.5);
 }
 
-/* шары (позиция задаётся JS, анимация — CSS) */
+/* шары: положение задаёт JS inline-left/top */
 .ibl {
   position: absolute;
-  width: 24px; height: 24px;
-  margin-left: -12px; margin-top: -12px;
+  left: 0; top: 0;
+  width: 22px; height: 22px;
+  margin-left: -11px; margin-top: -11px;
   border-radius: 50%;
   z-index: 2;
-  transform-style: preserve-3d;
+  transform-origin: 50% 50%;
   background:
     radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0 8%, transparent 24%),
-    var(--c);
+    var(--c, #ccc);
   box-shadow:
     inset -3px -4px 6px rgba(0,0,0,0.45),
     3px 5px 8px rgba(0,0,0,0.4);
-  animation: ballIdle 5.2s linear forwards;
+  transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.4,0,0.8,1);
 }
 .ibl.stripe {
   background:
     radial-gradient(circle at 32% 28%, rgba(255,255,255,0.9) 0 7%, transparent 22%),
-    linear-gradient(180deg, #f5f5ee 0 26%, var(--c) 26% 74%, #f5f5ee 74%);
+    linear-gradient(180deg, #f5f5ee 0 26%, var(--c, #ccc) 26% 74%, #f5f5ee 74%);
 }
 .ibl.cue {
+  width: 24px; height: 24px;
+  margin-left: -12px; margin-top: -12px;
   z-index: 4;
-  width: 26px; height: 26px;
-  margin-left: -13px; margin-top: -13px;
   background: radial-gradient(circle at 32% 28%, #fff 0, #f0f0ea 55%, #bdbdb4 100%);
   box-shadow:
     inset -3px -4px 6px rgba(0,0,0,0.25),
     0 0 16px rgba(255,255,255,0.35),
     3px 5px 8px rgba(0,0,0,0.45);
-  animation: cueFlight 5.2s cubic-bezier(0.35, 0.05, 0.25, 1) forwards;
-}
-.ibl.target {
-  z-index: 5;
-  animation: targetToPocket 5.2s cubic-bezier(0.25, 0.1, 0.2, 1) forwards;
-}
-.ibl.scatter {
-  animation: ballScatter 5.2s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
 }
 .ibl .num {
-  position: absolute;
-  inset: 28%;
+  position: absolute; inset: 30%;
   border-radius: 50%;
-  background: #f4f4ee;
-  color: #111;
-  font: 800 8px/1 var(--font);
+  background: #f4f4ee; color: #111;
+  font: 800 7px/1 var(--font);
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
 }
 .ibl.cue .num { display: none; }
 
-/* биток: стоит → удар в пирамиду → уходит в сторону */
-@keyframes cueFlight {
-  0%, 22% {
-    transform: translate3d(0, 0, 8px) scale(1);
-  }
-  28% {
-    transform: translate3d(var(--hit-x, 0px), var(--hit-y, -150px), 14px) scale(1.05);
-  }
-  38% {
-    transform: translate3d(calc(var(--hit-x, 0px) * 1.15), calc(var(--hit-y, -150px) * 1.05), 10px) scale(1);
-  }
-  55%, 100% {
-    transform: translate3d(calc(var(--hit-x, 0px) * 1.4 + 40px), calc(var(--hit-y, -150px) * 0.7), 4px) scale(0.95);
-    opacity: 0.85;
-  }
+/* уход в лузу */
+.ibl.sunk {
+  opacity: 0;
+  transform: scale(0.05);
+  pointer-events: none;
 }
 
-/* целевой шар: из пирамиды в верхнюю-левую лузу */
-@keyframes targetToPocket {
-  0%, 26% {
-    transform: translate3d(0, 0, 6px) scale(1);
-    opacity: 1;
-  }
-  40% {
-    transform: translate3d(var(--mid-x, -30px), var(--mid-y, -40px), 12px) scale(1.02);
-  }
-  62% {
-    transform: translate3d(var(--dx), var(--dy), 20px) scale(0.92);
-    opacity: 1;
-  }
-  78% {
-    transform: translate3d(var(--dx), var(--dy), 8px) scale(0.45);
-    opacity: 0.7;
-  }
-  88%, 100% {
-    transform: translate3d(var(--dx), var(--dy), -20px) scale(0.08);
-    opacity: 0;
-  }
-}
-
-@keyframes ballScatter {
-  0%, 26% {
-    transform: translate3d(0, 0, 4px) rotate(0deg);
-    opacity: 1;
-  }
-  55% {
-    transform: translate3d(var(--dx), var(--dy), 10px) rotate(var(--rot));
-    opacity: 1;
-  }
-  100% {
-    transform: translate3d(calc(var(--dx) * 1.05), calc(var(--dy) * 1.05), 2px) rotate(var(--rot));
-    opacity: 0.75;
-  }
-}
-@keyframes ballIdle {
-  0%, 100% { transform: translate3d(0,0,2px); }
-}
-
-/* кий */
+/* кий — статично, двигает JS */
 .istick {
   position: absolute;
-  left: 50%;
-  width: 7px; height: 260px;
+  left: 50%; top: 0;
+  width: 7px; height: 240px;
   margin-left: -3.5px;
   border-radius: 4px;
   z-index: 3;
@@ -324,48 +192,16 @@ body {
   background: linear-gradient(90deg, #e8c988, #8b5a2b 55%, #4a2e12);
   box-shadow: 2px 4px 8px rgba(0,0,0,0.55);
   opacity: 0;
-  animation: stickStrike 5.2s ease-in-out forwards;
-}
-@keyframes stickStrike {
-  0%, 12% {
-    opacity: 0;
-    top: -260px;
-    transform: translateY(-40px);
-  }
-  16% {
-    opacity: 1;
-    top: -260px;
-    transform: translateY(-28px);
-  }
-  24% {
-    opacity: 1;
-    top: -260px;
-    transform: translateY(2px);
-  }
-  28% {
-    opacity: 1;
-    top: -260px;
-    transform: translateY(-6px);
-  }
-  36%, 100% {
-    opacity: 0;
-    top: -260px;
-    transform: translateY(-10px);
-  }
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
-/* затемнение — камера «в лузе» */
 .intro-fade {
   position: absolute; inset: 0; z-index: 20;
   background: #000;
   opacity: 0;
   pointer-events: none;
-  animation: fadeToBlack 5.2s ease forwards;
-}
-@keyframes fadeToBlack {
-  0%, 72% { opacity: 0; }
-  86% { opacity: 0.55; }
-  96%, 100% { opacity: 1; }
+  transition: opacity 0.4s ease;
 }
 
 .intro-title {
@@ -377,7 +213,8 @@ body {
   background: linear-gradient(180deg, #fff3cf 0%, #dcb96b 60%, #a37c36 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   opacity: 0;
-  animation: titlePulse 5.2s ease forwards;
+  transform: translateY(12px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
 }
 .intro-tag {
   position: absolute; left: 0; right: 0; bottom: calc(13% - 28px);
@@ -385,13 +222,10 @@ body {
   text-align: center; font-size: 11px; letter-spacing: 0.34em; text-indent: 0.34em;
   text-transform: uppercase; color: var(--text-dim);
   opacity: 0;
-  animation: titlePulse 5.2s ease 0.15s forwards;
+  transition: opacity 0.6s ease;
 }
-@keyframes titlePulse {
-  0%, 8% { opacity: 0; transform: translateY(12px); }
-  18%, 70% { opacity: 1; transform: none; }
-  88%, 100% { opacity: 0; transform: translateY(-6px); }
-}
+.intro-title.on, .intro-tag.on { opacity: 1; transform: none; }
+
 .intro-skip {
   position: absolute; right: 16px; top: calc(14px + env(safe-area-inset-top));
   z-index: 30;
@@ -400,7 +234,7 @@ body {
   font-size: 11px; letter-spacing: 0.6px; cursor: pointer;
 }
 
-/* вход UI после интро */
+/* появление UI после интро */
 body:not(.ready) .home-header,
 body:not(.ready) .me-badge,
 body:not(.ready) .sport-card,
