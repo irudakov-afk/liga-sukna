@@ -177,16 +177,21 @@
     });
   }
 
-  /* ---------- 3D-интро: правильная анатомия стола и мгновенный показ меню ---------- */
+  /* ---------- 3D-интро: разбивка пирамиды и мгновенное появление меню ---------- */
   function buildIntro() {}
 
   function runIntro() {
     const el = $('intro');
     const canvas = $('intro-canvas');
     const blackout = $('intro-blackout');
+    const skipBtn = $('btn-skip-intro');
     const hud = el ? el.querySelector('.intro-hud') : null;
     const screens = document.querySelectorAll('.screen');
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let ended = false;
+    let rafId = null;
+    let renderer = null;
 
     function showMenuInstantly() {
       screens.forEach(s => {
@@ -196,9 +201,17 @@
       document.body.classList.add('ready');
     }
 
-    if (!el || !canvas || reduce || typeof THREE === 'undefined') {
-      if (el) el.remove();
+    function finishIntro() {
+      if (ended) return;
+      ended = true;
+      if (rafId) cancelAnimationFrame(rafId);
       showMenuInstantly();
+      try { if (renderer) renderer.dispose(); } catch (e) {}
+      try { if (el) el.remove(); } catch (e) {}
+    }
+
+    if (!el || !canvas || reduce || typeof THREE === 'undefined') {
+      finishIntro();
       return;
     }
 
@@ -208,544 +221,532 @@
     });
     if (blackout) blackout.style.opacity = '0';
 
-    let ended = false;
-    let rafId = null;
-
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvas,
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance'
-    });
-    renderer.setClearColor(0x050d0a, 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.04, 160);
-
-    // Освещение
-    const ambient = new THREE.AmbientLight(0xdff5e8, 0.56);
-    scene.add(ambient);
-
-    const lamp1 = new THREE.SpotLight(0xfff6e0, 1.75, 65, Math.PI / 3.1, 0.45, 1.1);
-    lamp1.position.set(0, 18, -5);
-    lamp1.castShadow = true;
-    lamp1.shadow.mapSize.width = 1024;
-    lamp1.shadow.mapSize.height = 1024;
-    lamp1.shadow.bias = -0.0008;
-    lamp1.shadow.normalBias = 0.02;
-    scene.add(lamp1);
-
-    const lamp2 = new THREE.SpotLight(0xfff0cc, 1.3, 65, Math.PI / 3.1, 0.5, 1.1);
-    lamp2.position.set(0, 18, 7);
-    scene.add(lamp2);
-
-    const rimLight = new THREE.DirectionalLight(0x7fd6a4, 0.4);
-    rimLight.position.set(-10, 8, 12);
-    scene.add(rimLight);
-
-    // Размеры игрового поля и бортов
-    const R = 0.34;
-    const TABLE_W = 11.2;
-    const TABLE_L = 22.4;
-    const HALF_W = TABLE_W / 2;
-    const HALF_L = TABLE_L / 2;
-    const RAIL_W = 1.15;
-    const RAIL_H = 0.72;
-
-    // Текстура сукна
-    function createFeltTexture() {
-      const c = document.createElement('canvas');
-      c.width = 512; c.height = 512;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#15663e';
-      ctx.fillRect(0, 0, 512, 512);
-      for (let i = 0; i < 16000; i++) {
-        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.028)' : 'rgba(0,0,0,0.04)';
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(6, 12);
-      return tex;
-    }
-
-    const feltMat = new THREE.MeshStandardMaterial({
-      map: createFeltTexture(),
-      roughness: 0.86,
-      metalness: 0.04
-    });
-    const feltMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(TABLE_W + RAIL_W * 2, 0.5, TABLE_L + RAIL_W * 2),
-      feltMat
-    );
-    feltMesh.position.y = -0.25;
-    feltMesh.receiveShadow = true;
-    scene.add(feltMesh);
-
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14 });
-    const headString = new THREE.Mesh(new THREE.PlaneGeometry(TABLE_W, 0.035), lineMat);
-    headString.rotation.x = -Math.PI / 2;
-    headString.position.set(0, 0.003, 5.6);
-    scene.add(headString);
-
-    // Материалы дерева, отбойников и луз
-    const woodMat = new THREE.MeshStandardMaterial({
-      color: 0x4b2912,
-      roughness: 0.34,
-      metalness: 0.12
-    });
-    const cushionMat = new THREE.MeshStandardMaterial({
-      color: 0x135d39,
-      roughness: 0.78
-    });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xe2c27d,
-      roughness: 0.25,
-      metalness: 0.85
-    });
-    const leatherMat = new THREE.MeshStandardMaterial({
-      color: 0x26160c,
-      roughness: 0.5,
-      metalness: 0.1
-    });
-
-    // Текстура глубины лузы: тёмно-коричневый край -> глубокий чёрный центр
-    function createPocketWellTexture() {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 256;
-      const ctx = c.getContext('2d');
-      const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
-      grad.addColorStop(0.0, '#020202');
-      grad.addColorStop(0.55, '#080504');
-      grad.addColorStop(0.85, '#1b0f08');
-      grad.addColorStop(1.0, '#2c170b');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 256, 256);
-      return new THREE.CanvasTexture(c);
-    }
-
-    const pocketWellMat = new THREE.MeshStandardMaterial({
-      map: createPocketWellTexture(),
-      roughness: 0.85,
-      metalness: 0.05
-    });
-
-    // Сплошная внешняя деревянная рама стола вокруг поля
-    const outerW = TABLE_W + RAIL_W * 2;
-    const outerL = TABLE_L + RAIL_W * 2;
-    const railY = RAIL_H / 2 - 0.08;
-
-    function addOuterRail(x, z, w, d, horizontal, dotsCount) {
-      const group = new THREE.Group();
-      const wood = new THREE.Mesh(new THREE.BoxGeometry(w, RAIL_H, d), woodMat);
-      wood.castShadow = true;
-      wood.receiveShadow = true;
-      group.add(wood);
-
-      for (let i = 1; i <= dotsCount; i++) {
-        const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
-        dot.position.y = RAIL_H / 2 + 0.01;
-        const frac = i / (dotsCount + 1);
-        if (horizontal) dot.position.x = -w / 2 + w * frac;
-        else dot.position.z = -d / 2 + d * frac;
-        group.add(dot);
-      }
-
-      group.position.set(x, railY, z);
-      scene.add(group);
-    }
-
-    addOuterRail(-HALF_W - RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
-    addOuterRail( HALF_W + RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
-    addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
-    addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
-
-    // Внутренние отбойники (cushions) с разрывами под 4 угловые и 2 средние лузы
-    const cushH = 0.42;
-    const cushD = 0.24;
-    const cushY = cushH / 2;
-
-    function addCushionSeg(x, z, len, horizontal) {
-      const seg = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? len : cushD, cushH, horizontal ? cushD : len),
-        cushionMat
-      );
-      seg.position.set(x, cushY, z);
-      seg.castShadow = true;
-      seg.receiveShadow = true;
-      scene.add(seg);
-    }
-
-    // Длинные борта: две половины слева и две справа от средней лузы (z = 0)
-    const halfSideGap = 0.66;
-    const cornerGapLong = 1.12;
-    const sideHalfLen = HALF_L - cornerGapLong - halfSideGap;
-
-    addCushion(-HALF_W + cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-    addCushion(-HALF_W + cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-    addCushion( HALF_W - cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-    addCushion( HALF_W - cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-
-    // Короткие борта: между угловыми лузами
-    const cornerGapShort = 1.18;
-    const endSegLen = TABLE_W - cornerGapShort * 2;
-    addCushion(0, -HALF_L + cushD / 2, endSegLen, true);
-    addCushion(0,  HALF_L - cushD / 2, endSegLen, true);
-
-    // 6 луз: углубление с градиентом от тёмно-коричневого к чёрному и кожаная губа-окантовка
-    const pocketDefs = [
-      { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: 0,           arcLen: Math.PI * 0.5 },
-      { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: Math.PI * 0.5, arcLen: Math.PI * 0.5 },
-      { x: -HALF_W + 0.04, z: 0,              r: 0.64, arcStart: -Math.PI * 0.5, arcLen: Math.PI },
-      { x:  HALF_W - 0.04, z: 0,              r: 0.64, arcStart: Math.PI * 0.5,  arcLen: Math.PI },
-      { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: -Math.PI * 0.5, arcLen: Math.PI * 0.5 },
-      { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: Math.PI,        arcLen: Math.PI * 0.5 }
-    ];
-
-    pocketDefs.forEach(pk => {
-      const well = new THREE.Mesh(
-        new THREE.CircleGeometry(pk.r, 32),
-        pocketWellMat
-      );
-      well.rotation.x = -Math.PI / 2;
-      well.position.set(pk.x, 0.004, pk.z);
-      scene.add(well);
-
-      const trim = new THREE.Mesh(
-        new THREE.TorusGeometry(pk.r + 0.02, 0.062, 12, 32, pk.arcLen),
-        leatherMat
-      );
-      trim.rotation.x = Math.PI / 2;
-      trim.rotation.z = pk.arcStart;
-      trim.position.set(pk.x, 0.045, pk.z);
-      trim.castShadow = true;
-      trim.receiveShadow = true;
-      scene.add(trim);
-    });
-
-    // Текстуры 3D-шаров
-    function makeBallTexture(num, hexColor, isStripe) {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 128;
-      const ctx = c.getContext('2d');
-
-      if (num === 0) {
-        ctx.fillStyle = '#f7f5ee';
-        ctx.fillRect(0, 0, 256, 128);
-        ctx.fillStyle = '#c92a2a';
-        ctx.beginPath(); ctx.arc(64, 64, 9, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(192, 64, 9, 0, Math.PI * 2); ctx.fill();
-      } else {
-        if (isStripe) {
-          ctx.fillStyle = '#f5f3eb';
-          ctx.fillRect(0, 0, 256, 128);
-          ctx.fillStyle = hexColor;
-          ctx.fillRect(0, 32, 256, 64);
-        } else {
-          ctx.fillStyle = hexColor;
-          ctx.fillRect(0, 0, 256, 128);
-        }
-        [64, 192].forEach(cx => {
-          ctx.fillStyle = '#f7f5ee';
-          ctx.beginPath(); ctx.arc(cx, 64, 21, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#111111';
-          ctx.font = 'bold 21px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(num), cx, 65);
-        });
-      }
-      return new THREE.CanvasTexture(c);
-    }
-
-    const ballPalette = [
-      { n: 1,  c: '#f2be16', s: false },
-      { n: 2,  c: '#1b58c7', s: false },
-      { n: 3,  c: '#d1261d', s: false },
-      { n: 4,  c: '#56298a', s: false },
-      { n: 8,  c: '#141414', s: false },
-      { n: 5,  c: '#eb6b17', s: false },
-      { n: 6,  c: '#18823e', s: false },
-      { n: 7,  c: '#821f1f', s: false },
-      { n: 9,  c: '#f2be16', s: true  },
-      { n: 10, c: '#1b58c7', s: true  },
-      { n: 11, c: '#d1261d', s: true  },
-      { n: 12, c: '#56298a', s: true  },
-      { n: 13, c: '#eb6b17', s: true  },
-      { n: 14, c: '#18823e', s: true  },
-      { n: 15, c: '#821f1f', s: true  }
-    ];
-
-    const sphereGeo = new THREE.SphereGeometry(R, 32, 24);
-
-    function createBallMesh(num, hexColor, isStripe) {
-      const mat = new THREE.MeshStandardMaterial({
-        map: makeBallTexture(num, hexColor, isStripe),
-        roughness: 0.14,
-        metalness: 0.08
+    if (skipBtn) {
+      skipBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        finishIntro();
       });
-      const mesh = new THREE.Mesh(sphereGeo, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.position.y = R;
-      return mesh;
     }
+    el.addEventListener('click', function () { finishIntro(); });
 
-    // Физические тела всех шаров (биток + 15 шаров пирамиды)
-    const cueStart = new THREE.Vector3(-0.22, R, 6.4);
-    const rackApex = new THREE.Vector3(0, R, -3.8);
-    const spacing = R * 2.02;
-    const rowStep = spacing * 0.87;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance'
+      });
+      renderer.setClearColor(0x050d0a, 1);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
 
-    const physicsBalls = [];
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.04, 160);
 
-    const cueMesh = createBallMesh(0, '#ffffff', false);
-    cueMesh.position.copy(cueStart);
-    scene.add(cueMesh);
+      const ambient = new THREE.AmbientLight(0xdff5e8, 0.58);
+      scene.add(ambient);
 
-    const cueBody = {
-      mesh: cueMesh,
-      x: cueStart.x,
-      z: cueStart.z,
-      vx: 0,
-      vz: 0,
-      prevX: cueStart.x,
-      prevZ: cueStart.z
-    };
-    physicsBalls.push(cueBody);
+      const lamp1 = new THREE.SpotLight(0xfff6e0, 1.75, 65, Math.PI / 3.1, 0.45, 1.1);
+      lamp1.position.set(0, 18, -5);
+      lamp1.castShadow = true;
+      lamp1.shadow.mapSize.width = 1024;
+      lamp1.shadow.mapSize.height = 1024;
+      lamp1.shadow.bias = -0.0008;
+      lamp1.shadow.normalBias = 0.02;
+      scene.add(lamp1);
 
-    let idx = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col <= row; col++, idx++) {
-        const spec = ballPalette[idx];
-        const mesh = createBallMesh(spec.n, spec.c, spec.s);
-        const startX = rackApex.x + (col - row / 2) * spacing;
-        const startZ = rackApex.z - row * rowStep;
-        mesh.position.set(startX, R, startZ);
-        mesh.rotation.set(Math.random() * 2, Math.random() * 6, Math.random() * 2);
-        scene.add(mesh);
+      const lamp2 = new THREE.SpotLight(0xfff0cc, 1.3, 65, Math.PI / 3.1, 0.5, 1.1);
+      lamp2.position.set(0, 18, 7);
+      scene.add(lamp2);
 
-        physicsBalls.push({
-          mesh: mesh,
-          x: startX,
-          z: startZ,
-          vx: 0,
-          vz: 0,
-          prevX: startX,
-          prevZ: startZ
+      const rimLight = new THREE.DirectionalLight(0x7fd6a4, 0.4);
+      rimLight.position.set(-10, 8, 12);
+      scene.add(rimLight);
+
+      const R = 0.34;
+      const TABLE_W = 11.2;
+      const TABLE_L = 22.4;
+      const HALF_W = TABLE_W / 2;
+      const HALF_L = TABLE_L / 2;
+      const RAIL_W = 1.15;
+      const RAIL_H = 0.72;
+
+      function createFeltTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#15663e';
+        ctx.fillRect(0, 0, 512, 512);
+        for (let i = 0; i < 16000; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.028)' : 'rgba(0,0,0,0.04)';
+          ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(6, 12);
+        return tex;
+      }
+
+      const feltMat = new THREE.MeshStandardMaterial({
+        map: createFeltTexture(),
+        roughness: 0.86,
+        metalness: 0.04
+      });
+      const feltMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(TABLE_W + RAIL_W * 2, 0.5, TABLE_L + RAIL_W * 2),
+        feltMat
+      );
+      feltMesh.position.y = -0.25;
+      feltMesh.receiveShadow = true;
+      scene.add(feltMesh);
+
+      const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14 });
+      const headString = new THREE.Mesh(new THREE.PlaneGeometry(TABLE_W, 0.035), lineMat);
+      headString.rotation.x = -Math.PI / 2;
+      headString.position.set(0, 0.003, 5.6);
+      scene.add(headString);
+
+      const woodMat = new THREE.MeshStandardMaterial({
+        color: 0x4b2912,
+        roughness: 0.34,
+        metalness: 0.12
+      });
+      const cushionMat = new THREE.MeshStandardMaterial({
+        color: 0x135d39,
+        roughness: 0.78
+      });
+      const goldMat = new THREE.MeshStandardMaterial({
+        color: 0xe2c27d,
+        roughness: 0.25,
+        metalness: 0.85
+      });
+      const leatherMat = new THREE.MeshStandardMaterial({
+        color: 0x26160c,
+        roughness: 0.5,
+        metalness: 0.1
+      });
+
+      function createPocketWellTexture() {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d');
+        const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+        grad.addColorStop(0.0, '#020202');
+        grad.addColorStop(0.55, '#080504');
+        grad.addColorStop(0.85, '#1b0f08');
+        grad.addColorStop(1.0, '#2c170b');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 256);
+        return new THREE.CanvasTexture(c);
+      }
+
+      const pocketWellMat = new THREE.MeshStandardMaterial({
+        map: createPocketWellTexture(),
+        roughness: 0.85,
+        metalness: 0.05
+      });
+
+      const outerW = TABLE_W + RAIL_W * 2;
+      const outerL = TABLE_L + RAIL_W * 2;
+      const railY = RAIL_H / 2 - 0.08;
+
+      function addOuterRail(x, z, w, d, horizontal, dotsCount) {
+        const group = new THREE.Group();
+        const wood = new THREE.Mesh(new THREE.BoxGeometry(w, RAIL_H, d), woodMat);
+        wood.castShadow = true;
+        wood.receiveShadow = true;
+        group.add(wood);
+
+        for (let i = 1; i <= dotsCount; i++) {
+          const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
+          dot.position.y = RAIL_H / 2 + 0.01;
+          const frac = i / (dotsCount + 1);
+          if (horizontal) dot.position.x = -w / 2 + w * frac;
+          else dot.position.z = -d / 2 + d * frac;
+          group.add(dot);
+        }
+
+        group.position.set(x, railY, z);
+        scene.add(group);
+      }
+
+      addOuterRail(-HALF_W - RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail( HALF_W + RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
+      addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
+
+      const cushH = 0.42;
+      const cushD = 0.24;
+      const cushY = cushH / 2;
+
+      function addCushionSeg(x, z, len, horizontal) {
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(horizontal ? len : cushD, cushH, horizontal ? cushD : len),
+          cushionMat
+        );
+        seg.position.set(x, cushY, z);
+        seg.castShadow = true;
+        seg.receiveShadow = true;
+        scene.add(seg);
+      }
+
+      const halfSideGap = 0.66;
+      const cornerGapLong = 1.12;
+      const sideHalfLen = HALF_L - cornerGapLong - halfSideGap;
+
+      addCushionSeg(-HALF_W + cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+      addCushionSeg(-HALF_W + cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+      addCushionSeg( HALF_W - cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+      addCushionSeg( HALF_W - cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+
+      const cornerGapShort = 1.18;
+      const endSegLen = TABLE_W - cornerGapShort * 2;
+      addCushionSeg(0, -HALF_L + cushD / 2, endSegLen, true);
+      addCushionSeg(0,  HALF_L - cushD / 2, endSegLen, true);
+
+      const pocketDefs = [
+        { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: 0,           arcLen: Math.PI * 0.5 },
+        { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: Math.PI * 0.5, arcLen: Math.PI * 0.5 },
+        { x: -HALF_W + 0.04, z: 0,              r: 0.64, arcStart: -Math.PI * 0.5, arcLen: Math.PI },
+        { x:  HALF_W - 0.04, z: 0,              r: 0.64, arcStart: Math.PI * 0.5,  arcLen: Math.PI },
+        { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: -Math.PI * 0.5, arcLen: Math.PI * 0.5 },
+        { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: Math.PI,        arcLen: Math.PI * 0.5 }
+      ];
+
+      pocketDefs.forEach(pk => {
+        const well = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r, 32),
+          pocketWellMat
+        );
+        well.rotation.x = -Math.PI / 2;
+        well.position.set(pk.x, 0.004, pk.z);
+        scene.add(well);
+
+        const trim = new THREE.Mesh(
+          new THREE.TorusGeometry(pk.r + 0.02, 0.062, 12, 32, pk.arcLen),
+          leatherMat
+        );
+        trim.rotation.x = Math.PI / 2;
+        trim.rotation.z = pk.arcStart;
+        trim.position.set(pk.x, 0.045, pk.z);
+        trim.castShadow = true;
+        trim.receiveShadow = true;
+        scene.add(trim);
+      });
+
+      function makeBallTexture(num, hexColor, isStripe) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 128;
+        const ctx = c.getContext('2d');
+
+        if (num === 0) {
+          ctx.fillStyle = '#f7f5ee';
+          ctx.fillRect(0, 0, 256, 128);
+          ctx.fillStyle = '#c92a2a';
+          ctx.beginPath(); ctx.arc(64, 64, 9, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(192, 64, 9, 0, Math.PI * 2); ctx.fill();
+        } else {
+          if (isStripe) {
+            ctx.fillStyle = '#f5f3eb';
+            ctx.fillRect(0, 0, 256, 128);
+            ctx.fillStyle = hexColor;
+            ctx.fillRect(0, 32, 256, 64);
+          } else {
+            ctx.fillStyle = hexColor;
+            ctx.fillRect(0, 0, 256, 128);
+          }
+          [64, 192].forEach(cx => {
+            ctx.fillStyle = '#f7f5ee';
+            ctx.beginPath(); ctx.arc(cx, 64, 21, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#111111';
+            ctx.font = 'bold 21px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(num), cx, 65);
+          });
+        }
+        return new THREE.CanvasTexture(c);
+      }
+
+      const ballPalette = [
+        { n: 1,  c: '#f2be16', s: false },
+        { n: 2,  c: '#1b58c7', s: false },
+        { n: 3,  c: '#d1261d', s: false },
+        { n: 4,  c: '#56298a', s: false },
+        { n: 8,  c: '#141414', s: false },
+        { n: 5,  c: '#eb6b17', s: false },
+        { n: 6,  c: '#18823e', s: false },
+        { n: 7,  c: '#821f1f', s: false },
+        { n: 9,  c: '#f2be16', s: true  },
+        { n: 10, c: '#1b58c7', s: true  },
+        { n: 11, c: '#d1261d', s: true  },
+        { n: 12, c: '#56298a', s: true  },
+        { n: 13, c: '#eb6b17', s: true  },
+        { n: 14, c: '#18823e', s: true  },
+        { n: 15, c: '#821f1f', s: true  }
+      ];
+
+      const sphereGeo = new THREE.SphereGeometry(R, 32, 24);
+
+      function createBallMesh(num, hexColor, isStripe) {
+        const mat = new THREE.MeshStandardMaterial({
+          map: makeBallTexture(num, hexColor, isStripe),
+          roughness: 0.14,
+          metalness: 0.08
         });
-      }
-    }
-
-    // Кий
-    const stickGeo = new THREE.CylinderGeometry(0.045, 0.11, 8.5, 16);
-    stickGeo.rotateX(Math.PI / 2);
-    const stickMat = new THREE.MeshStandardMaterial({ color: 0xc99654, roughness: 0.3 });
-    const stickMesh = new THREE.Mesh(stickGeo, stickMat);
-    stickMesh.position.set(cueStart.x, R + 0.18, cueStart.z + 4.8);
-    stickMesh.rotation.x = -0.04;
-    scene.add(stickMesh);
-
-    function easeInCubic(t) { return t * t * t; }
-    function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
-
-    // Плотная физика столкновений шаров и бортов
-    const minX = -HALF_W + R + 0.24;
-    const maxX =  HALF_W - R - 0.24;
-    const minZ = -HALF_L + R + 0.24;
-    const maxZ =  HALF_L - R - 0.24;
-    const minDiam = R * 2.01;
-
-    function stepPhysics(subDt) {
-      const damping = Math.exp(-1.15 * subDt);
-      for (let i = 0; i < physicsBalls.length; i++) {
-        const b = physicsBalls[i];
-        b.vx *= damping;
-        b.vz *= damping;
-        b.x += b.vx * subDt;
-        b.z += b.vz * subDt;
-
-        if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * 0.84; }
-        else if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * 0.84; }
-
-        if (b.z < minZ) { b.z = minZ; b.vz = Math.abs(b.vz) * 0.84; }
-        else if (b.z > maxZ) { b.z = maxZ; b.vz = -Math.abs(b.vz) * 0.84; }
+        const mesh = new THREE.Mesh(sphereGeo, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.position.y = R;
+        return mesh;
       }
 
-      for (let iter = 0; iter < 3; iter++) {
+      const cueStart = new THREE.Vector3(-0.22, R, 6.4);
+      const rackApex = new THREE.Vector3(0, R, -3.8);
+      const spacing = R * 2.02;
+      const rowStep = spacing * 0.87;
+
+      const physicsBalls = [];
+
+      const cueMesh = createBallMesh(0, '#ffffff', false);
+      cueMesh.position.copy(cueStart);
+      scene.add(cueMesh);
+
+      const cueBody = {
+        mesh: cueMesh,
+        x: cueStart.x,
+        z: cueStart.z,
+        vx: 0,
+        vz: 0,
+        prevX: cueStart.x,
+        prevZ: cueStart.z
+      };
+      physicsBalls.push(cueBody);
+
+      let idx = 0;
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col <= row; col++, idx++) {
+          const spec = ballPalette[idx];
+          const mesh = createBallMesh(spec.n, spec.c, spec.s);
+          const startX = rackApex.x + (col - row / 2) * spacing;
+          const startZ = rackApex.z - row * rowStep;
+          mesh.position.set(startX, R, startZ);
+          mesh.rotation.set(Math.random() * 2, Math.random() * 6, Math.random() * 2);
+          scene.add(mesh);
+
+          physicsBalls.push({
+            mesh: mesh,
+            x: startX,
+            z: startZ,
+            vx: 0,
+            vz: 0,
+            prevX: startX,
+            prevZ: startZ
+          });
+        }
+      }
+
+      const stickGeo = new THREE.CylinderGeometry(0.045, 0.11, 8.5, 16);
+      stickGeo.rotateX(Math.PI / 2);
+      const stickMat = new THREE.MeshStandardMaterial({ color: 0xc99654, roughness: 0.3 });
+      const stickMesh = new THREE.Mesh(stickGeo, stickMat);
+      stickMesh.position.set(cueStart.x, R + 0.18, cueStart.z + 4.8);
+      stickMesh.rotation.x = -0.04;
+      scene.add(stickMesh);
+
+      function easeInCubic(t) { return t * t * t; }
+      function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
+
+      const minX = -HALF_W + R + 0.24;
+      const maxX =  HALF_W - R - 0.24;
+      const minZ = -HALF_L + R + 0.24;
+      const maxZ =  HALF_L - R - 0.24;
+      const minDiam = R * 2.01;
+
+      function stepPhysics(subDt) {
+        const damping = Math.exp(-1.15 * subDt);
         for (let i = 0; i < physicsBalls.length; i++) {
-          const a = physicsBalls[i];
-          for (let j = i + 1; j < physicsBalls.length; j++) {
-            const b = physicsBalls[j];
-            let dx = b.x - a.x;
-            let dz = b.z - a.z;
-            let distSq = dx * dx + dz * dz;
-            if (distSq < minDiam * minDiam) {
-              let dist = Math.sqrt(distSq);
-              if (dist < 0.0001) {
-                dx = (i % 2 === 0 ? 1 : -1) * 0.01;
-                dz = -0.01;
-                dist = Math.sqrt(dx * dx + dz * dz);
-              }
-              const nx = dx / dist;
-              const nz = dz / dist;
-              const overlap = minDiam - dist;
+          const b = physicsBalls[i];
+          b.vx *= damping;
+          b.vz *= damping;
+          b.x += b.vx * subDt;
+          b.z += b.vz * subDt;
 
-              a.x -= nx * overlap * 0.52;
-              a.z -= nz * overlap * 0.52;
-              b.x += nx * overlap * 0.52;
-              b.z += nz * overlap * 0.52;
+          if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * 0.84; }
+          else if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * 0.84; }
 
-              const rvx = b.vx - a.vx;
-              const rvz = b.vz - a.vz;
-              const vn = rvx * nx + rvz * nz;
-              if (vn < 0) {
-                const restitution = 0.92;
-                const imp = -(1 + restitution) * vn * 0.5;
-                a.vx -= imp * nx;
-                a.vz -= imp * nz;
-                b.vx += imp * nx;
-                b.vz += imp * nz;
+          if (b.z < minZ) { b.z = minZ; b.vz = Math.abs(b.vz) * 0.84; }
+          else if (b.z > maxZ) { b.z = maxZ; b.vz = -Math.abs(b.vz) * 0.84; }
+        }
+
+        for (let iter = 0; iter < 3; iter++) {
+          for (let i = 0; i < physicsBalls.length; i++) {
+            const a = physicsBalls[i];
+            for (let j = i + 1; j < physicsBalls.length; j++) {
+              const b = physicsBalls[j];
+              let dx = b.x - a.x;
+              let dz = b.z - a.z;
+              let distSq = dx * dx + dz * dz;
+              if (distSq < minDiam * minDiam) {
+                let dist = Math.sqrt(distSq);
+                if (dist < 0.0001) {
+                  dx = (i % 2 === 0 ? 1 : -1) * 0.01;
+                  dz = -0.01;
+                  dist = Math.sqrt(dx * dx + dz * dz);
+                }
+                const nx = dx / dist;
+                const nz = dz / dist;
+                const overlap = minDiam - dist;
+
+                a.x -= nx * overlap * 0.52;
+                a.z -= nz * overlap * 0.52;
+                b.x += nx * overlap * 0.52;
+                b.z += nz * overlap * 0.52;
+
+                const rvx = b.vx - a.vx;
+                const rvz = b.vz - a.vz;
+                const vn = rvx * nx + rvz * nz;
+                if (vn < 0) {
+                  const restitution = 0.92;
+                  const imp = -(1 + restitution) * vn * 0.5;
+                  a.vx -= imp * nx;
+                  a.vz -= imp * nz;
+                  b.vx += imp * nx;
+                  b.vz += imp * nz;
+                }
               }
             }
           }
         }
       }
-    }
 
-    const upAxis = new THREE.Vector3(0, 1, 0);
-    const tmpDelta = new THREE.Vector3();
-    const tmpAxis = new THREE.Vector3();
-    const tmpQuat = new THREE.Quaternion();
+      const upAxis = new THREE.Vector3(0, 1, 0);
+      const tmpDelta = new THREE.Vector3();
+      const tmpAxis = new THREE.Vector3();
+      const tmpQuat = new THREE.Quaternion();
 
-    function syncMeshes() {
-      for (let i = 0; i < physicsBalls.length; i++) {
-        const b = physicsBalls[i];
-        b.mesh.position.set(b.x, R, b.z);
-        tmpDelta.set(b.x - b.prevX, 0, b.z - b.prevZ);
-        const d = tmpDelta.length();
-        if (d > 0.0001) {
-          tmpAxis.crossVectors(upAxis, tmpDelta).normalize();
-          tmpQuat.setFromAxisAngle(tmpAxis, d / R);
-          b.mesh.quaternion.premultiply(tmpQuat);
-        }
-        b.prevX = b.x;
-        b.prevZ = b.z;
-      }
-    }
-
-    const camPos = new THREE.Vector3();
-    const camLook = new THREE.Vector3();
-    const smoothedLook = new THREE.Vector3(0, 0.35, -1.5);
-
-    const DURATION = 2400;
-    const T_IMPACT = 0.34;
-    let struck = false;
-    let lastNow = performance.now();
-    const t0 = lastNow;
-
-    function onResize() {
-      if (ended) return;
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-    window.addEventListener('resize', onResize);
-
-    // Моментальное появление меню без пауз после пролёта камеры
-    function finishIntro() {
-      if (ended) return;
-      ended = true;
-      window.removeEventListener('resize', onResize);
-      if (rafId) cancelAnimationFrame(rafId);
-      showMenuInstantly();
-      renderer.dispose();
-      el.remove();
-    }
-
-    el.addEventListener('click', function () { finishIntro(); });
-
-    function animate(now) {
-      if (ended) return;
-      const frameDt = Math.min((now - lastNow) / 1000, 0.05);
-      lastNow = now;
-      const p = clamp((now - t0) / DURATION, 0, 1);
-
-      if (p < 0.25) {
-        const pull = Math.sin(clamp((p - 0.10) / 0.15, 0, 1) * Math.PI);
-        stickMesh.position.z = cueStart.z + 4.8 + pull * 1.1;
-      } else {
-        stickMesh.visible = false;
-      }
-
-      if (p < 0.23) {
-        cueBody.x = cueStart.x;
-        cueBody.z = cueStart.z;
-        cueBody.vx = 0;
-        cueBody.vz = 0;
-      } else if (p < T_IMPACT) {
-        const shotT = easeInCubic((p - 0.23) / (T_IMPACT - 0.23));
-        cueBody.x = THREE.MathUtils.lerp(cueStart.x, -0.02, shotT);
-        cueBody.z = THREE.MathUtils.lerp(cueStart.z, rackApex.z + R * 2.05, shotT);
-        cueBody.vx = -0.4;
-        cueBody.vz = -24.0;
-      } else {
-        if (!struck) {
-          struck = true;
-          cueBody.vx = -2.2;
-          cueBody.vz = -9.5;
-          for (let i = 1; i < physicsBalls.length; i++) {
-            const b = physicsBalls[i];
-            const dx = b.x - cueBody.x;
-            const dz = b.z - cueBody.z;
-            const dist = Math.max(0.1, Math.hypot(dx, dz));
-            const nx = dx / dist;
-            const nz = dz / dist;
-            const power = clamp(18.5 / (1 + dist * 0.14), 5.5, 17.5);
-            b.vx = nx * power + (Math.random() - 0.5) * 2.4;
-            b.vz = nz * power + (Math.random() - 0.5) * 2.4;
+      function syncMeshes() {
+        for (let i = 0; i < physicsBalls.length; i++) {
+          const b = physicsBalls[i];
+          b.mesh.position.set(b.x, R, b.z);
+          tmpDelta.set(b.x - b.prevX, 0, b.z - b.prevZ);
+          const d = tmpDelta.length();
+          if (d > 0.0001) {
+            tmpAxis.crossVectors(upAxis, tmpDelta).normalize();
+            tmpQuat.setFromAxisAngle(tmpAxis, d / R);
+            b.mesh.quaternion.premultiply(tmpQuat);
           }
+          b.prevX = b.x;
+          b.prevZ = b.z;
         }
-        const steps = 4;
-        const subDt = (frameDt * 2.6) / steps;
-        for (let s = 0; s < steps; s++) stepPhysics(subDt);
       }
-      syncMeshes();
 
-      const flyT = easeInOutSine(p);
-      camPos.set(
-        THREE.MathUtils.lerp(-1.1, 0.0, flyT),
-        THREE.MathUtils.lerp(6.8, 2.4, flyT),
-        THREE.MathUtils.lerp(13.5, -6.5, flyT)
-      );
-      camLook.set(
-        THREE.MathUtils.lerp(0, 0, flyT),
-        THREE.MathUtils.lerp(0.25, 0.9, flyT),
-        THREE.MathUtils.lerp(-2.5, -10.5, flyT)
-      );
+      const camPos = new THREE.Vector3();
+      const camLook = new THREE.Vector3();
+      const smoothedLook = new THREE.Vector3(0, 0.35, -1.5);
 
-      smoothedLook.lerp(camLook, 0.25);
-      camera.position.copy(camPos);
-      camera.lookAt(smoothedLook);
+      const DURATION = 2000;
+      const T_IMPACT = 0.34;
+      let struck = false;
+      let lastNow = performance.now();
+      const t0 = lastNow;
 
-      if (hud && p > 0.7) hud.classList.add('hide');
-
-      renderer.render(scene, camera);
-
-      if (p >= 1) {
-        finishIntro();
-      } else {
-        rafId = requestAnimationFrame(animate);
+      function onResize() {
+        if (ended) return;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
       }
+      window.addEventListener('resize', onResize);
+
+      function animate(now) {
+        if (ended) return;
+        try {
+          const frameDt = Math.min((now - lastNow) / 1000, 0.05);
+          lastNow = now;
+          const p = clamp((now - t0) / DURATION, 0, 1);
+
+          if (p < 0.25) {
+            const pull = Math.sin(clamp((p - 0.10) / 0.15, 0, 1) * Math.PI);
+            stickMesh.position.z = cueStart.z + 4.8 + pull * 1.1;
+          } else {
+            stickMesh.visible = false;
+          }
+
+          if (p < 0.23) {
+            cueBody.x = cueStart.x;
+            cueBody.z = cueStart.z;
+            cueBody.vx = 0;
+            cueBody.vz = 0;
+          } else if (p < T_IMPACT) {
+            const shotT = easeInCubic((p - 0.23) / (T_IMPACT - 0.23));
+            cueBody.x = THREE.MathUtils.lerp(cueStart.x, -0.02, shotT);
+            cueBody.z = THREE.MathUtils.lerp(cueStart.z, rackApex.z + R * 2.05, shotT);
+            cueBody.vx = -0.4;
+            cueBody.vz = -24.0;
+          } else {
+            if (!struck) {
+              struck = true;
+              cueBody.vx = -2.2;
+              cueBody.vz = -9.5;
+              for (let i = 1; i < physicsBalls.length; i++) {
+                const b = physicsBalls[i];
+                const dx = b.x - cueBody.x;
+                const dz = b.z - cueBody.z;
+                const dist = Math.max(0.1, Math.hypot(dx, dz));
+                const nx = dx / dist;
+                const nz = dz / dist;
+                const power = clamp(18.5 / (1 + dist * 0.14), 5.5, 17.5);
+                b.vx = nx * power + (Math.random() - 0.5) * 2.4;
+                b.vz = nz * power + (Math.random() - 0.5) * 2.4;
+              }
+            }
+            const steps = 4;
+            const subDt = (frameDt * 2.8) / steps;
+            for (let s = 0; s < steps; s++) stepPhysics(subDt);
+          }
+          syncMeshes();
+
+          const flyT = easeInOutSine(p);
+          camPos.set(
+            THREE.MathUtils.lerp(-1.1, 0.0, flyT),
+            THREE.MathUtils.lerp(6.8, 2.5, flyT),
+            THREE.MathUtils.lerp(13.5, -5.5, flyT)
+          );
+          camLook.set(
+            THREE.MathUtils.lerp(0, 0, flyT),
+            THREE.MathUtils.lerp(0.25, 0.9, flyT),
+            THREE.MathUtils.lerp(-2.5, -9.5, flyT)
+          );
+
+          smoothedLook.lerp(camLook, 0.28);
+          camera.position.copy(camPos);
+          camera.lookAt(smoothedLook);
+
+          if (hud && p > 0.75) hud.classList.add('hide');
+
+          renderer.render(scene, camera);
+
+          if (p >= 1) {
+            window.removeEventListener('resize', onResize);
+            finishIntro();
+          } else {
+            rafId = requestAnimationFrame(animate);
+          }
+        } catch (err) {
+          window.removeEventListener('resize', onResize);
+          finishIntro();
+        }
+      }
+
+      rafId = requestAnimationFrame(animate);
+    } catch (err) {
+      finishIntro();
     }
-
-    rafId = requestAnimationFrame(animate);
   }
 
   /* ---------- главная ---------- */
