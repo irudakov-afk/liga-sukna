@@ -712,7 +712,7 @@ pocketDefs.forEach(pk => {
           }
           syncMeshes();
 
-          const flyT = easeInOutSine(p);
+          
           const isPortrait = window.innerHeight > window.innerWidth;
           const startX = isPortrait ? -1.6 : -1.1;
           const startY = isPortrait ? 10.5 : 6.8;
