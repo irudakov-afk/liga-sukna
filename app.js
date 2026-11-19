@@ -178,11 +178,8 @@
     });
   }
 
-  /* ---------- интро: камера подлетает к столу ---------- */
-  /* ---------- интро 3D: rAF, шары только на сукне, камера за цветным в лузу ---------- */
-  function buildIntro() {
-    /* сцена собирается в runIntro — здесь noop для совместимости */
-  }
+  /* ---------- интро: камера плавно в центр стола ---------- */
+  function buildIntro() { /* сцена собирается в runIntro */ }
 
   function runIntro() {
     const root = $('intro');
@@ -207,12 +204,12 @@
 
     const FW = felt.clientWidth || 244;
     const FH = felt.clientHeight || 504;
-    const R = 11;               // было 13 — под 22px шар
-const POCKET_R = 17;        // радиус лузы, в который шар «проваливается»
-const minX = R + 2;
-const maxX = FW - R - 2;
-const minY = R + 2;
-const maxY = FH - R - 2;
+    const R = 11;               // радиус шара (22px)
+    const POCKET_R = 17;        // радиус, при котором шар «проваливается»
+    const minX = R + 2;
+    const maxX = FW - R - 2;
+    const minY = R + 2;
+    const maxY = FH - R - 2;
 
     function clampBall(x, y) {
       return {
@@ -222,12 +219,12 @@ const maxY = FH - R - 2;
     }
 
     const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
-    const D = 24;
+    const D = 22;               // дистанция в пирамиде под новый радиус
     const rackCx = FW * 0.5;
     const rackCy = FH * 0.32;
     const cueStart = { x: FW * 0.5, y: FH * 0.72 };
     // цель — верхняя левая луза (чуть внутри сукна, потом уход в карман)
-    const pocket = { x: 8, y: 8 };
+    const pocket = { x: 10, y: 10 };
 
     const balls = [];
 
@@ -289,7 +286,7 @@ const maxY = FH - R - 2;
     }
     placeBalls();
 
-    // камера: позиция в пространстве сцены (translate/rotate/scale)
+    // камера
     const cam = {
       x: 40, y: 120, z: -1400,
       rotX: 70, rotZ: -32, scale: 0.5
@@ -309,17 +306,12 @@ const maxY = FH - R - 2;
     function easeIn(t) { return t * t * t; }
     function lerp(a, b, t) { return a + (b - a) * t; }
 
-    // фазы времени (сек)
-    // 0.0–1.6  подлёт к битку
-    // 1.6–2.0  удар
-    // 2.0–2.8  разбивка
-    // 2.8–4.6  камера на цветном → в лузу
-    // 4.6–5.4  темнота
-  const T_APPROACH = 1.6;
-const T_SHOT     = 2.0;
-const T_BREAK    = 2.6;
-const T_SETTLE   = 4.6;   // за это время камера приходит в центр
-const T_END      = 5.0;
+    // фазы
+    const T_APPROACH = 1.6;
+    const T_SHOT     = 2.0;
+    const T_BREAK    = 2.6;
+    const T_SETTLE   = 4.6;
+    const T_END      = 5.0;
 
     let started = false;
     let shotDone = false;
@@ -342,14 +334,12 @@ const T_END      = 5.0;
     function fireShot() {
       if (shotDone) return;
       shotDone = true;
-      // импульс битка в сторону пирамиды
       const dx = rackCx - cueBall.x;
       const dy = rackCy - cueBall.y;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
       cueBall.vx = (dx / len) * 920;
       cueBall.vy = (dy / len) * 920;
 
-      // лёгкий разлёт остальных + сильный импульс целевому к лузе
       balls.forEach(b => {
         if (b.cue || b.sunk) return;
         if (b.target) {
@@ -375,7 +365,6 @@ const T_END      = 5.0;
     }
 
     function stepPhysics(dt) {
-      // простая динамика + трение; отражение только внутри сукна (не на борт)
       const friction = Math.pow(0.985, dt * 60);
       balls.forEach(b => {
         if (b.sunk) return;
@@ -390,34 +379,32 @@ const T_END      = 5.0;
         if (b.y < minY) { b.y = minY; b.vy = Math.abs(b.vy) * 0.35; }
         if (b.y > maxY) { b.y = maxY; b.vy = -Math.abs(b.vy) * 0.35; }
 
-        // целевой шар: если близко к лузе — «засасываем»
-       // целевой шар: если близко к лузе — «проваливаемся» и исчезаем
-if (b.target && !b.sunk) {
-  const ddx = b.x - pocket.x;
-  const ddy = b.y - pocket.y;
-  const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+        // целевой шар: притягиваем к лузе, затем утапливаем
+        if (b.target) {
+          const ddx = b.x - pocket.x;
+          const ddy = b.y - pocket.y;
+          const dist = Math.sqrt(ddx * ddx + ddy * ddy);
 
-  // притягиваем к центру лузы (гравитация кармана)
-  if (dist < 48) {
-    b.vx += (-ddx) * 14 * dt * 60;
-    b.vy += (-ddy) * 14 * dt * 60;
-  }
+          if (dist < 48) {
+            b.vx += (-ddx) * 14 * dt * 60;
+            b.vy += (-ddy) * 14 * dt * 60;
+          }
 
-  // как только шар «вошёл» в лузу — утапливаем
-  if (dist < POCKET_R) {
-    b.sunk = true;
-    b.x = pocket.x;
-    b.y = pocket.y;
-    b.el.style.left = b.x + 'px';
-    b.el.style.top = b.y + 'px';
-    // маленькая пауза перед анимацией, чтобы шар оказался по центру кармана
-    requestAnimationFrame(() => {
-      b.el.classList.add('sunk');
-    });
-  }
-}
+          if (dist < POCKET_R) {
+            b.sunk = true;
+            b.x = pocket.x;
+            b.y = pocket.y;
+            b.el.style.left = b.x + 'px';
+            b.el.style.top = b.y + 'px';
+            // rAF — чтобы left/top успели примениться до анимации
+            requestAnimationFrame(function () {
+              b.el.classList.add('sunk');
+            });
+          }
+        }
+      });
 
-      // мягкие столкновения (упрощённо)
+      // мягкие столкновения
       for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
           const a = balls[i], c = balls[j];
@@ -444,17 +431,16 @@ if (b.target && !b.sunk) {
       placeBalls();
     }
 
-    // цели камеры по фазам
-function setCamCenter(u) {
-  // u: 0 → 1 — плавный наезд на центр стола
-  const t = easeInOut(u);
-  cam.x = lerp(40, 0, t);
-  cam.y = lerp(120, 0, t);
-  cam.z = lerp(-1400, -80, t);
-  cam.rotX = lerp(70, 50, t);   // без резкого наклона
-  cam.rotZ = lerp(-32, 0, t);
-  cam.scale = lerp(0.5, 1.25, t);
-}
+    // Единственная функция камеры: плавный наезд на центр стола
+    function setCamCenter(u) {
+      const t = easeInOut(Math.max(0, Math.min(1, u)));
+      cam.x = lerp(40, 0, t);
+      cam.y = lerp(120, 0, t);
+      cam.z = lerp(-1400, -80, t);
+      cam.rotX = lerp(70, 50, t);
+      cam.rotZ = lerp(-32, 0, t);
+      cam.scale = lerp(0.5, 1.25, t);
+    }
 
     function frame(now) {
       if (ended) return;
@@ -474,33 +460,14 @@ function setCamCenter(u) {
         }
       }
 
-     if (t >= T_APPROACH && !shotDone) fireShot();
-if (t >= T_APPROACH) stepPhysics(dt);
+      if (t >= T_APPROACH && !shotDone) fireShot();
+      if (t >= T_APPROACH) stepPhysics(dt);
 
-if (t < T_BREAK) {
-  // фиксируем камеру после удара
-  setCamCenter(Math.min(0.35, t / T_BREAK));
-} else {
-  // плавно в центр стола
-  setCamCenter(0.35 + 0.65 * Math.min(1, (t - T_BREAK) / (T_SETTLE - T_BREAK)));
-}
-applyCam();
-
-      if (t < T_APPROACH) {
-        setCamApproach(t / T_APPROACH);
-      } else if (t < T_BREAK) {
-        // короткая стабилизация после удара
-        const u = (t - T_APPROACH) / (T_BREAK - T_APPROACH);
-        cam.x = lerp(8, 0, easeOut(u));
-        cam.y = lerp(30, 16, easeOut(u));
-        cam.z = lerp(-220, -120, easeOut(u));
-        cam.rotX = lerp(54, 52, u);
-        cam.rotZ = lerp(-6, 0, u);
-        cam.scale = lerp(1.05, 1.1, u);
-      } else if (t < T_POCKET) {
-        setCamFollowTarget((t - T_BREAK) / (T_POCKET - T_BREAK));
+      // камера: до T_BREAK — начало наезда, дальше — до T_SETTLE
+      if (t < T_BREAK) {
+        setCamCenter(Math.min(0.35, t / T_BREAK));
       } else {
-        setCamDive(Math.min(1, (t - T_POCKET) / (T_END - T_POCKET)));
+        setCamCenter(0.35 + 0.65 * Math.min(1, (t - T_BREAK) / (T_SETTLE - T_BREAK)));
       }
       applyCam();
 
@@ -832,7 +799,6 @@ applyCam();
     return id;
   }
 
-  /** Приглашённый открыл ссылку/кнопку: добавляем в лобби и сразу ведём в матч. */
   function openLobbyById(id) {
     const me = tgUser && tgUser.id ? { id: tgUser.id, name: tgUser.name, username: tgUser.username || '' } : null;
     const req = me
@@ -873,7 +839,7 @@ applyCam();
 
   function applyLobby(l) {
     if (!l || (lobbyId && l.id !== lobbyId)) return;
-    if (lobbyVersion >= 0 && (l.version || 0) < lobbyVersion) return; // устаревший ответ
+    if (lobbyVersion >= 0 && (l.version || 0) < lobbyVersion) return;
     lobby = l; lobbyVersion = l.version || 0;
     if (l.status === 'cancelled') { handleCancelled(); return; }
     if (l.status === 'finished') { handleFinished(l); return; }
@@ -1001,7 +967,6 @@ applyCam();
 
     let html = '';
 
-    // --- счёт
     if (P.length === 2) {
       const side = i => '<div class="duel-side' + (isMe(i) ? ' me' : '') + '">' + avatarHtml(P[i], 'lg') +
         '<div class="duel-name">' + esc(P[i].name) + '</div>' +
@@ -1027,7 +992,6 @@ applyCam();
       }).join('') + '</div>';
     }
 
-    // --- текущая партия
     html += '<div class="panel"><div class="panel-head"><h3>Партия ' + gameNo + '</h3></div>';
     if (!act) html += '<p class="hint" style="margin:0 0 10px">Вы наблюдаете за встречей — отметить победителя могут участники.</p>';
     if (pair) {
@@ -1050,7 +1014,6 @@ applyCam();
     }
     html += '</div>';
 
-    // --- личные счёты в этой встрече (для 3–4 игроков)
     if (P.length > 2 && t.pairs.length) {
       html += '<div class="panel"><div class="panel-head"><h3>Личные счёты</h3></div>' +
         t.pairs.map(pr => {
@@ -1061,7 +1024,6 @@ applyCam();
         }).join('') + '</div>';
     }
 
-    // --- ход встречи
     if (games.length) {
       html += '<div class="panel"><div class="panel-head"><h3>Ход встречи</h3></div><div class="game-list">' +
         games.slice().reverse().map((g, ri) => {
@@ -1107,7 +1069,6 @@ applyCam();
     const n = games.length + 1;
     haptic('medium');
 
-    // мгновенно показываем у себя, сервер подтвердит (или откатит, если кто-то успел раньше)
     games.push({ n: n, a: pair.a, b: pair.b, w: idx, at: new Date().toISOString(), by: myId() });
     l.match.pair = P.length === 2 ? { a: 0, b: 1 } : null;
     pairPick = [];
@@ -1291,7 +1252,6 @@ applyCam();
       '<span class="debt-cash">' + d.bet.toLocaleString('ru-RU') + ' ₽</span></div>'
     ).join('') : '<div class="debt-card empty">Пока пусто</div>';
 
-    // матрица группы
     const n = 4;
     const root = $('group-matrix');
     root.style.gridTemplateColumns = '1fr repeat(4, 1fr)';
@@ -1322,7 +1282,6 @@ applyCam();
       });
     });
 
-    // сетки плей-офф
     function matchHtml(mKey) {
       const m = state.matches[mKey];
       if (!m) return '';
@@ -1519,10 +1478,8 @@ applyCam();
 
     const wanted = getLobbyParam();
     if (wanted) {
-      // приглашённый: сразу в матч, минуя меню
       openLobbyById(wanted);
     } else if (tgUser && isTgId(tgUser.id)) {
-      // вернуться в идущую встречу (своя или чужая)
       Api.getMyActive(tgUser.id).then(function (res) {
         if (!res || !res.lobby || userNavigated) return;
         if (String(res.lobby.hostId) === myId()) enterLobby(res.lobby);
