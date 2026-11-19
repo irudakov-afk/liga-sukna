@@ -380,63 +380,65 @@
       addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
       const cushH = 0.42;
-      const cushD = 0.24;
-      const cushY = cushH / 2;
+      const cushH = 0.42;
+const cushD = 0.24;
+const cushY = cushH / 2;
 
-      function addCushionSeg(x, z, len, horizontal) {
-        const seg = new THREE.Mesh(
-          new THREE.BoxGeometry(horizontal ? len : cushD, cushH, horizontal ? cushD : len),
-          cushionMat
-        );
-        seg.position.set(x, cushY, z);
-        seg.castShadow = true;
-        seg.receiveShadow = true;
-        scene.add(seg);
-      }
+function addCushionSeg(x, z, len, horizontal) {
+  const seg = new THREE.Mesh(
+    new THREE.BoxGeometry(horizontal ? len : cushD, cushH, horizontal ? cushD : len),
+    cushionMat
+  );
+  seg.position.set(x, cushY, z);
+  seg.castShadow = true;
+  seg.receiveShadow = true;
+  scene.add(seg);
+}
 
-      const halfSideGap = 0.66;
-      const cornerGapLong = 1.12;
-      const sideHalfLen = HALF_L - cornerGapLong - halfSideGap;
+// Увеличенные зазоры под круглые лузы, чтобы борта не наезжали на отверстие
+const halfSideGap = 0.92;
+const cornerGapLong = 1.45;
+const sideHalfLen = HALF_L - cornerGapLong - halfSideGap;
 
-      addCushionSeg(-HALF_W + cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-      addCushionSeg(-HALF_W + cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-      addCushionSeg( HALF_W - cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
-      addCushionSeg( HALF_W - cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+addCushionSeg(-HALF_W + cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+addCushionSeg(-HALF_W + cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+addCushionSeg( HALF_W - cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
+addCushionSeg( HALF_W - cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
 
-      const cornerGapShort = 1.18;
-      const endSegLen = TABLE_W - cornerGapShort * 2;
-      addCushionSeg(0, -HALF_L + cushD / 2, endSegLen, true);
-      addCushionSeg(0,  HALF_L - cushD / 2, endSegLen, true);
+const cornerGapShort = 1.52;
+const endSegLen = TABLE_W - cornerGapShort * 2;
+addCushionSeg(0, -HALF_L + cushD / 2, endSegLen, true);
+addCushionSeg(0,  HALF_L - cushD / 2, endSegLen, true);
 
-      const pocketDefs = [
-        { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: 0,           arcLen: Math.PI * 0.5 },
-        { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.72, arcStart: Math.PI * 0.5, arcLen: Math.PI * 0.5 },
-        { x: -HALF_W + 0.04, z: 0,              r: 0.64, arcStart: -Math.PI * 0.5, arcLen: Math.PI },
-        { x:  HALF_W - 0.04, z: 0,              r: 0.64, arcStart: Math.PI * 0.5,  arcLen: Math.PI },
-        { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: -Math.PI * 0.5, arcLen: Math.PI * 0.5 },
-        { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.72, arcStart: Math.PI,        arcLen: Math.PI * 0.5 }
-      ];
+// Круглые лузы (полный круг 2*PI) и открытое пространство над ними
+const pocketDefs = [
+  { x: -HALF_W + 0.12, z: -HALF_L + 0.12, r: 0.68 },
+  { x:  HALF_W - 0.12, z: -HALF_L + 0.12, r: 0.68 },
+  { x: -HALF_W + 0.08, z: 0,              r: 0.62 },
+  { x:  HALF_W - 0.08, z: 0,              r: 0.62 },
+  { x: -HALF_W + 0.12, z:  HALF_L - 0.12, r: 0.68 },
+  { x:  HALF_W - 0.12, z:  HALF_L - 0.12, r: 0.68 }
+];
 
-      pocketDefs.forEach(pk => {
-        const well = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r, 32),
-          pocketWellMat
-        );
-        well.rotation.x = -Math.PI / 2;
-        well.position.set(pk.x, 0.004, pk.z);
-        scene.add(well);
+pocketDefs.forEach(pk => {
+  const well = new THREE.Mesh(
+    new THREE.CircleGeometry(pk.r, 36),
+    pocketWellMat
+  );
+  well.rotation.x = -Math.PI / 2;
+  well.position.set(pk.x, 0.008, pk.z);
+  scene.add(well);
 
-        const trim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r + 0.02, 0.062, 12, 32, pk.arcLen),
-          leatherMat
-        );
-        trim.rotation.x = Math.PI / 2;
-        trim.rotation.z = pk.arcStart;
-        trim.position.set(pk.x, 0.045, pk.z);
-        trim.castShadow = true;
-        trim.receiveShadow = true;
-        scene.add(trim);
-      });
+  const trim = new THREE.Mesh(
+    new THREE.TorusGeometry(pk.r, 0.055, 14, 36),
+    leatherMat
+  );
+  trim.rotation.x = Math.PI / 2;
+  trim.position.set(pk.x, 0.055, pk.z);
+  trim.castShadow = true;
+  trim.receiveShadow = true;
+  scene.add(trim);
+});
 
       function makeBallTexture(num, hexColor, isStripe) {
         const c = document.createElement('canvas');
