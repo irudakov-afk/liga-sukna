@@ -430,7 +430,7 @@
           new THREE.CylinderGeometry(pk.r, pk.r, 0.08, 36, 1, true),
           pocketWallMat
         );
-        wallCyl.position.set(pk.x, 0.03, pk.z);
+        wallCyl.position.set(pk.x, 0.3, pk.z);
         wallCyl.castShadow = true;
         wallCyl.receiveShadow = true;
         scene.add(wallCyl);
@@ -441,7 +441,7 @@
           pocketGradMat
         );
         topCap.rotation.x = -Math.PI / 2;
-        topCap.position.set(pk.x, 0.5, pk.z);
+        topCap.position.set(pk.x, 0.062, pk.z);
         topCap.receiveShadow = true;
         scene.add(topCap);
 
