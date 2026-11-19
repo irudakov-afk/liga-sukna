@@ -427,10 +427,10 @@
       pocketDefs.forEach(pk => {
         // Боковая стенка цилиндра до уровня деревянного борта
         const wallCyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r, pk.r, cylinderH, 36, 1, true),
+          new THREE.CylinderGeometry(pk.r, pk.r, 0.08, 36, 1, true),
           pocketWallMat
         );
-        wallCyl.position.set(pk.x, cylinderH / 2 - 0.01, pk.z);
+        wallCyl.position.set(pk.x, 0.03, pk.z);
         wallCyl.castShadow = true;
         wallCyl.receiveShadow = true;
         scene.add(wallCyl);
@@ -441,7 +441,7 @@
           pocketGradMat
         );
         topCap.rotation.x = -Math.PI / 2;
-        topCap.position.set(pk.x, cylinderTopY + 0.002, pk.z);
+        topCap.position.set(pk.x, 0.062, pk.z);
         topCap.receiveShadow = true;
         scene.add(topCap);
 
