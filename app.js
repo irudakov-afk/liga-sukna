@@ -1,12 +1,6 @@
 (function () {
   'use strict';
 
-  /* =====================================================
-     Лига Сукна — клиент
-     Встреча = лобби на сервере. Все участники опрашивают его раз в ~2.5 с,
-     поэтому приглашённый сразу видит ход матча и может отметить победителя.
-     ===================================================== */
-
   const POLL_MS = 2500;
   const SPORTS = [
     { id: 'american', name: 'Американский пул', desc: 'Пул 8 / 9 / 10' },
@@ -23,7 +17,7 @@
       '<span class="mb big" style="--c:#d6ccae;left:60px;top:14px"></span>'
   };
   const FORMAT_HINT = {
-    free: 'От 2 до 4 игроков. Пары выбираете прямо во встрече — кто с кем играет. Считаются партии, винрейт общий и против каждого соперника.',
+    free: 'От 2 до 4 игроков. Пары выбираете прямо во встрече — кто с кем играет.',
     tournament: 'Ровно 4 игрока: группа «каждый с каждым» и плей-офф Double Elimination.'
   };
 
@@ -42,7 +36,6 @@
   let tFinishing = false;
   const shown = {};
 
-  /* ---------- утилиты ---------- */
   function $(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -57,6 +50,7 @@
   function initial(n) { return String(n || '?').trim().slice(0, 1).toUpperCase(); }
   function pct(w, g) { return g > 0 ? Math.round((w / g) * 100) : 0; }
   function sportName(id) { const s = SPORTS.find(x => x.id === id); return s ? s.name : 'Бильярд'; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -177,129 +171,10 @@
   }
 
   /* =====================================================
-     ИНТРО — чистая CSS-анимация.
-     JS только собирает шары в #intro-felt и вешает skip.
-     Вся тайм-линия — в CSS (camSequence, cueFlight, targetToPocket и т.д.).
+     ИНТРО: полностью на rAF.
+     CSS только рисует статику (рамка, сукно, лузы, кий, шары).
+     JS считает позиции, физику и камеру.
      ===================================================== */
-  function buildIntroBalls() {
-    const felt = $('intro-felt');
-    if (!felt) return;
-    // если уже собрано — не дублируем (на случай повторного вызова)
-    if (felt.querySelector('.ibl')) return;
-
-    const FW = felt.clientWidth || 240;
-    const FH = felt.clientHeight || 480;
-
-    // Раскладка: пирамида из 15 шаров, центр по X, чуть выше центра по Y.
-    // felt внутри таблицы 280x520 с рамой 20px → клиентские ~240x480.
-    const R = 12;                 // радиус шара (24px)
-    const D = 24;                 // дистанция в пирамиде
-    const rackCx = FW * 0.5;
-    const rackCy = FH * 0.28;     // пирамида ближе к верху, биток снизу — стандарт
-    const cueCx = FW * 0.5;
-    const cueCy = FH * 0.78;
-
-    // Левый верхний карман в координатах felt:
-    //   .ipk.p1 имеет left:-12px; top:-12px; width:34px → центр ~ (5, 5)
-    // целевой шар должен «уехать» в него из пирамиды
-    const pocketX = 5, pocketY = 5;
-
-    function addBall(opts) {
-      const el = document.createElement('div');
-      el.className = 'ibl';
-      if (opts.stripe) el.classList.add('stripe');
-      if (opts.cue) el.classList.add('cue');
-      if (opts.target) el.classList.add('target');
-      if (opts.scatter) el.classList.add('scatter');
-      el.style.setProperty('--c', opts.color);
-      el.style.left = opts.x + 'px';
-      el.style.top = opts.y + 'px';
-      if (opts.dx != null) el.style.setProperty('--dx', opts.dx + 'px');
-      if (opts.dy != null) el.style.setProperty('--dy', opts.dy + 'px');
-      if (opts.midX != null) el.style.setProperty('--mid-x', opts.midX + 'px');
-      if (opts.midY != null) el.style.setProperty('--mid-y', opts.midY + 'px');
-      if (opts.rot != null) el.style.setProperty('--rot', opts.rot + 'deg');
-      // цифра
-      if (opts.num != null && !opts.cue) {
-        const n = document.createElement('span');
-        n.className = 'num';
-        n.textContent = String(opts.num);
-        // в CSS для .ibl .num отдельного правила нет — добавим инлайн
-        n.style.cssText = 'position:absolute;inset:28%;border-radius:50%;background:#f4f4ee;color:#111;' +
-                          'font:800 8px/1 var(--font);display:flex;align-items:center;justify-content:center;pointer-events:none;';
-        el.appendChild(n);
-      }
-      felt.appendChild(el);
-      return el;
-    }
-
-    const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
-
-    // Пируем пирамиду. Один из шаров — целевой (уедет в верхнюю-левую лузу).
-    let idx = 0;
-    let targetIdx = 9; // 3-й ряд, крайний левый (примерно), удобно для дуги в угол
-    for (let r = 0; r < 5; r++) {
-      for (let k = 0; k <= r; k++, idx++) {
-        const x = rackCx + (k - r / 2) * D;
-        const y = rackCy - r * (D * 0.86);
-        const isTarget = idx === targetIdx;
-        const num = idx === 4 ? 8 : (idx % 7) + 1;
-
-        // стартовые смещения для CSS-анимации
-        // dx/dy считаем от стартовой точки — целевой шар должен прийти в карман.
-        let dx = 0, dy = 0, midX = 0, midY = 0, rot = 0;
-
-        if (isTarget) {
-          // из своей стартовой позиции в левую-верхнюю лузу
-          dx = pocketX - x;
-          dy = pocketY - y;
-          // дуга: промежуточная точка чуть правее прямой
-          midX = dx * 0.55 + 18;
-          midY = dy * 0.55 - 8;
-        } else {
-          // разлёт «в стороны» + лёгкое смещение от центра пирамиды
-          const ang = Math.atan2(y - rackCy, x - rackCx) + (Math.random() - 0.5) * 0.8;
-          const dist = 30 + Math.random() * 30;
-          dx = Math.cos(ang) * dist;
-          dy = Math.sin(ang) * dist - 10;
-          rot = (Math.random() * 2 - 1) * 60;
-        }
-
-        addBall({
-          x: x, y: y,
-          color: idx === 4 ? '#151515' : colors[idx % 7],
-          stripe: idx >= 8,
-          num: num,
-          target: isTarget,
-          scatter: !isTarget,
-          dx: dx, dy: dy, midX: midX, midY: midY, rot: rot
-        });
-      }
-    }
-
-    // Биток
-    // Импульс: в сторону пирамиды (к rackCx, rackCy), плюс отклонение вправо-вверх,
-    // чтобы он «выскочил» из кадра (как в CSS — он уходит за пирамиду).
-    const vx = rackCx - cueCx;
-    const vy = rackCy - cueCy;
-    const vlen = Math.sqrt(vx * vx + vy * vy) || 1;
-    const hitX = (vx / vlen) * 150;      // вперёд к пирамиде
-    const hitY = (vy / vlen) * 150;
-    addBall({
-      x: cueCx, y: cueCy,
-      color: '#f4f2ea',
-      cue: true,
-      // биток: после удара уходит вправо-вверх
-      dx: hitX, dy: hitY
-    });
-    // для cueFlight CSS ожидает --hit-x/--hit-y (см. .ibl.cue keyframes)
-    const cueEl = felt.querySelector('.ibl.cue');
-    if (cueEl) {
-      cueEl.style.setProperty('--hit-x', (hitX + 30) + 'px');
-      cueEl.style.setProperty('--hit-y', (hitY - 20) + 'px');
-    }
-  }
-
   function runIntro() {
     const root = $('intro');
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -309,40 +184,269 @@
       return;
     }
 
-    // 1) собираем шары — CSS-анимации подхватят их автоматически
-    buildIntroBalls();
-
-    // 2) завершение: после CSS-анимации (5.2s) или клика
-    let finished = false;
-    function finish(skip) {
-      if (finished) return;
-      finished = true;
-      if (skip) root.classList.add('skip');
-      else root.classList.add('done');
-      document.body.classList.add('ready');
-      setTimeout(function () {
-        try { root.remove(); } catch (e) {}
-      }, skip ? 320 : 260);
-    }
-
-    // основной таймер (CSS .intro-fade заканчивается на 5.2s)
-    setTimeout(function () { finish(false); }, 5300);
-
-    // клик / кнопка skip
+    const stage = root.querySelector('.intro-stage');
+    const camEl = $('intro-camera');
+    const felt = $('intro-felt');
+    const fade = $('intro-fade');
+    const title = root.querySelector('.intro-title');
+    const tag = root.querySelector('.intro-tag');
     const skip = $('intro-skip');
-    if (skip) {
-      skip.addEventListener('click', function (e) {
-        e.stopPropagation();
-        finish(true);
-      });
-    }
-    root.addEventListener('click', function () { finish(true); });
+    if (!camEl || !felt) { root.remove(); document.body.classList.add('ready'); return; }
 
-    // на всякий случай — если CSS анимация закончилась раньше (анимация title)
-    const fade = root.querySelector('.intro-fade');
-    if (fade) {
-      fade.addEventListener('animationend', function () { finish(false); }, { once: true });
-    }
+    // ждём кадр, чтобы felt получил размеры
+    requestAnimationFrame(function () {
+      const FW = felt.clientWidth || 240;
+      const FH = felt.clientHeight || 480;
+      const R = 11;          // радиус шара (22px)
+      const POCKET_R = 16;   // радиус «успешного» провала в лузу
+      const minX = R + 2, maxX = FW - R - 2;
+      const minY = R + 2, maxY = FH - R - 2;
+
+      const D = 22;              // дистанция в пирамиде
+      const rackCx = FW / 2;
+      const rackCy = FH * 0.30;
+      const cueStart = { x: FW / 2, y: FH * 0.76 };
+      const pocket = { x: 5, y: 5 }; // левая верхняя луза
+
+      const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
+      const balls = [];
+      let targetBall = null;
+      let cueBall = null;
+
+      function makeBall(o) {
+        const el = document.createElement('div');
+        el.className = 'ibl' + (o.stripe ? ' stripe' : '') + (o.cue ? ' cue' : '');
+        el.style.setProperty('--c', o.color);
+        if (o.num != null && !o.cue) {
+          const n = document.createElement('span');
+          n.className = 'num';
+          n.textContent = String(o.num);
+          el.appendChild(n);
+        }
+        el.style.left = o.x + 'px';
+        el.style.top = o.y + 'px';
+        felt.appendChild(el);
+        const b = {
+          el, x: o.x, y: o.y, vx: 0, vy: 0,
+          cue: !!o.cue, target: !!o.target, sunk: false
+        };
+        balls.push(b);
+        return b;
+      }
+
+      // пирамида
+      let idx = 0;
+      for (let r = 0; r < 5; r++) {
+        for (let k = 0; k <= r; k++, idx++) {
+          const x = rackCx + (k - r / 2) * D;
+          const y = rackCy - r * (D * 0.86);
+          const isTarget = (r === 2 && k === 0);
+          const b = makeBall({
+            x, y,
+            color: idx === 4 ? '#151515' : colors[idx % 7],
+            stripe: idx >= 8,
+            num: idx === 4 ? 8 : (idx % 7) + 1,
+            target: isTarget
+          });
+          if (isTarget) targetBall = b;
+        }
+      }
+      cueBall = makeBall({ x: cueStart.x, y: cueStart.y, color: '#f4f2ea', cue: true });
+
+      // кий
+      const stick = document.createElement('div');
+      stick.className = 'istick';
+      felt.appendChild(stick);
+
+      // --- камера ---
+      const cam = { x: 0, y: 60, z: -900, rotX: 60, rotZ: -16, scale: 0.55 };
+      function applyCam() {
+        camEl.style.transform =
+          'translate3d(' + cam.x.toFixed(2) + 'px,' + cam.y.toFixed(2) + 'px,' + cam.z.toFixed(2) + 'px) ' +
+          'rotateX(' + cam.rotX.toFixed(2) + 'deg) rotateZ(' + cam.rotZ.toFixed(2) + 'deg) ' +
+          'scale(' + cam.scale.toFixed(3) + ')';
+      }
+      applyCam();
+
+      // --- физика ---
+      function fireShot() {
+        const dx = rackCx - cueBall.x;
+        const dy = rackCy - cueBall.y;
+        const len = Math.hypot(dx, dy) || 1;
+        cueBall.vx = (dx / len) * 900;
+        cueBall.vy = (dy / len) * 900;
+        balls.forEach(b => {
+          if (b.cue || b.sunk) return;
+          if (b.target) {
+            const tx = pocket.x - b.x;
+            const ty = pocket.y - b.y;
+            const tl = Math.hypot(tx, ty) || 1;
+            b.vx = (tx / tl) * 320;
+            b.vy = (ty / tl) * 320;
+          } else {
+            const ang = Math.atan2(b.y - rackCy, b.x - rackCx) + (Math.random() - 0.5) * 0.9;
+            const sp = 120 + Math.random() * 220;
+            b.vx = Math.cos(ang) * sp;
+            b.vy = Math.sin(ang) * sp - 40;
+          }
+        });
+        // кий уходит
+        stick.style.opacity = '0';
+      }
+
+      function stepPhysics(dt) {
+        const fr = Math.pow(0.985, dt * 60);
+        balls.forEach(b => {
+          if (b.sunk) return;
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.vx *= fr;
+          b.vy *= fr;
+          if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * 0.35; }
+          if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * 0.35; }
+          if (b.y < minY) { b.y = minY; b.vy = Math.abs(b.vy) * 0.35; }
+          if (b.y > maxY) { b.y = maxY; b.vy = -Math.abs(b.vy) * 0.35; }
+
+          if (b.target) {
+            const ddx = b.x - pocket.x, ddy = b.y - pocket.y;
+            const dist = Math.hypot(ddx, ddy);
+            if (dist < 48) { b.vx += -ddx * 14 * dt * 60; b.vy += -ddy * 14 * dt * 60; }
+            if (dist < POCKET_R) {
+              b.sunk = true;
+              b.x = pocket.x; b.y = pocket.y;
+              b.el.style.left = b.x + 'px';
+              b.el.style.top = b.y + 'px';
+              requestAnimationFrame(() => b.el.classList.add('sunk'));
+            }
+          }
+        });
+
+        // столкновения
+        for (let i = 0; i < balls.length; i++) {
+          for (let j = i + 1; j < balls.length; j++) {
+            const a = balls[i], c = balls[j];
+            if (a.sunk || c.sunk) continue;
+            const dx = c.x - a.x, dy = c.y - a.y;
+            const dist = Math.hypot(dx, dy) || 0.01;
+            const minD = R * 2;
+            if (dist < minD) {
+              const nx = dx / dist, ny = dy / dist;
+              const ov = (minD - dist) / 2;
+              a.x -= nx * ov; a.y -= ny * ov;
+              c.x += nx * ov; c.y += ny * ov;
+              const dvx = a.vx - c.vx, dvy = a.vy - c.vy;
+              const imp = dvx * nx + dvy * ny;
+              if (imp > 0) {
+                a.vx -= imp * nx * 0.85; a.vy -= imp * ny * 0.85;
+                c.vx += imp * nx * 0.85; c.vy += imp * ny * 0.85;
+              }
+            }
+          }
+        }
+
+        // рисуем
+        balls.forEach(b => {
+          if (b.sunk) return;
+          b.el.style.left = b.x + 'px';
+          b.el.style.top = b.y + 'px';
+        });
+      }
+
+      // --- таймлайн ---
+      const T_APPROACH = 1.4;   // подлёт к битку
+      const T_SHOT     = 1.9;   // удар
+      const T_BREAK    = 2.6;   // разбивка устаканилась
+      const T_CENTER   = 4.2;   // камера в центре стола
+      const T_END      = 4.8;   // затемнение, финиш
+
+      let t0 = 0;
+      let started = false;
+      let shotDone = false;
+      let ended = false;
+      let raf = 0;
+
+      function easeInOut(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; }
+      function easeOut(t) { return 1 - Math.pow(1-t, 3); }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+
+      function setCamApproach(u) {
+        const t = easeInOut(clamp(u, 0, 1));
+        cam.x = lerp(0, 0, t);
+        cam.y = lerp(60, 20, t);
+        cam.z = lerp(-900, -220, t);
+        cam.rotX = lerp(60, 50, t);
+        cam.rotZ = lerp(-16, -4, t);
+        cam.scale = lerp(0.55, 1.05, t);
+      }
+      function setCamCenter(u) {
+        const t = easeInOut(clamp(u, 0, 1));
+        cam.x = lerp(0, 0, t);
+        cam.y = lerp(20, 0, t);
+        cam.z = lerp(-220, -60, t);
+        cam.rotX = lerp(50, 44, t);
+        cam.rotZ = lerp(-4, 0, t);
+        cam.scale = lerp(1.05, 1.35, t);
+      }
+
+      function finish(skipMode) {
+        if (ended) return;
+        ended = true;
+        if (raf) cancelAnimationFrame(raf);
+        root.classList.add('hide');
+        document.body.classList.add('ready');
+        setTimeout(() => { try { root.remove(); } catch (e) {} }, 380);
+      }
+
+      function frame(now) {
+        if (ended) return;
+        if (!started) { started = true; t0 = now; }
+        const t = (now - t0) / 1000;
+        const dt = Math.min(0.033, 0.016);
+
+        // кий
+        if (!shotDone && t > 0.7 && t < T_SHOT) {
+          stick.style.opacity = '1';
+          const pull = t < 1.2 ? easeOut((t - 0.7) / 0.5) : Math.max(0, 1 - (t - 1.2) / 0.4);
+          const y = lerp(-30, 24, pull);
+          stick.style.transform = 'translate3d(' + cueBall.x + 'px, ' + (cueBall.y + y) + 'px, 0)';
+        }
+        if (t >= T_SHOT && !shotDone) { shotDone = true; fireShot(); }
+        if (t >= T_SHOT) stepPhysics(dt);
+
+        // камера
+        if (t < T_SHOT) {
+          setCamApproach(t / T_SHOT);
+        } else if (t < T_BREAK) {
+          // лёгкая стабилизация после удара
+          const u = (t - T_SHOT) / (T_BREAK - T_SHOT);
+          setCamApproach(1 - 0.15 * easeOut(u));
+        } else {
+          const u = (t - T_BREAK) / (T_CENTER - T_BREAK);
+          setCamCenter(u);
+        }
+        applyCam();
+
+        // титры
+        if (title && tag) {
+          if (t > 0.4 && t < 3.8) { title.classList.add('on'); tag.classList.add('on'); }
+          else { title.classList.remove('on'); tag.classList.remove('on'); }
+        }
+
+        // затемнение
+        if (fade) {
+          const f = t < T_CENTER ? 0 : Math.min(1, (t - T_CENTER) / (T_END - T_CENTER));
+          fade.style.opacity = String(f);
+        }
+
+        if (t >= T_END) { finish(false); return; }
+        raf = requestAnimationFrame(frame);
+      }
+
+      if (skip) skip.addEventListener('click', (e) => { e.stopPropagation(); finish(true); });
+      root.addEventListener('click', () => finish(true));
+
+      raf = requestAnimationFrame(frame);
+    });
   }
 
   /* ---------- главная ---------- */
@@ -376,7 +480,7 @@
       (l.status === 'live' ? 'идёт игра' : 'ждём старт') + '</small>';
   }
 
-  /* ---------- настройка встречи ---------- */
+  /* ---------- настройка ---------- */
   function readBet() { return Math.max(0, parseInt($('setup-bet').value, 10) || 0); }
 
   function openSetup() {
@@ -418,7 +522,7 @@
       '<div class="field-block"><label>Позвать из бота</label>' +
         '<div id="roster-grid" class="roster-grid"><div class="hint">Загрузка…</div></div>' +
         '<div id="picked-list" class="picked-list"></div>' +
-        '<p class="hint">В списке те, кто хотя бы раз нажал Start у бота. Нажми на карточку — игроку уйдёт приглашение, и он сразу попадёт в матч.</p></div>' +
+        '<p class="hint">В списке те, кто хотя бы раз нажал Start у бота. Нажми на карточку — игроку уйдёт приглашение.</p></div>' +
       '<div class="field-block"><label>Или добавь игрока вручную</label>' +
         '<div id="manual-players"></div>' +
         '<button type="button" class="chip" id="btn-add-manual">＋ Ещё игрок</button></div>';
@@ -477,7 +581,7 @@
     const me = myId();
     const list = rosterList.filter(p => String(p.telegramId) !== me);
     if (!rosterList.length) {
-      grid.innerHTML = '<div class="hint">В таблице пока нет игроков. Открой бота → /start — ты появишься в базе. Друзья тоже должны нажать Start.</div>';
+      grid.innerHTML = '<div class="hint">В таблице пока нет игроков. Открой бота → /start — ты появишься в базе.</div>';
       return;
     }
     if (!list.length) {
@@ -632,7 +736,7 @@
     showScreen('home');
   }
 
-  /* ---------- лобби: вход, опрос, переходы ---------- */
+  /* ---------- лобби ---------- */
   function getLobbyParam() {
     let id = '';
     try { id = new URLSearchParams(location.search).get('lobby') || ''; } catch (e) {}
@@ -699,14 +803,8 @@
     }
   }
 
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(pollTick, POLL_MS);
-  }
-  function stopPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = null; pollBusy = false;
-  }
+  function startPolling() { stopPolling(); pollTimer = setInterval(pollTick, POLL_MS); }
+  function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; pollBusy = false; }
   function pollTick() {
     if (!lobbyId || pollBusy || busy > 0 || document.hidden) return;
     pollBusy = true;
@@ -723,11 +821,7 @@
     Storage.clearCurrent();
     updateResume();
   }
-  function handleCancelled() {
-    leaveLobby();
-    toast('Встреча отменена');
-    showScreen('home');
-  }
+  function handleCancelled() { leaveLobby(); toast('Встреча отменена'); showScreen('home'); }
   function handleFinished(l) {
     stopPolling();
     Storage.clearCurrent();
@@ -755,7 +849,7 @@
     }).catch(function () {});
   }
 
-  /* ---------- матч: свободный формат ---------- */
+  /* ---------- матч ---------- */
   function tally(l) {
     const P = l.participants || [];
     const games = (l.match && l.match.games) || [];
@@ -764,10 +858,10 @@
       const loser = g.w === g.a ? g.b : g.a;
       wins[g.w]++; losses[loser]++;
       const a = Math.min(g.a, g.b), b = Math.max(g.a, g.b), k = a + '-' + b;
-      const o = pairs[k] || (pairs[k] = { a: a, b: b, aw: 0, bw: 0 });
+      const o = pairs[k] || (pairs[k] = { a, b, aw: 0, bw: 0 });
       if (g.w === a) o.aw++; else o.bw++;
     });
-    return { wins: wins, losses: losses, games: games, pairs: Object.keys(pairs).map(k => pairs[k]) };
+    return { wins, losses, games, pairs: Object.keys(pairs).map(k => pairs[k]) };
   }
 
   function renderWaiting(l, body) {
@@ -776,7 +870,7 @@
     const list = (l.players || []).filter(p => p.status !== 'viewer');
     body.innerHTML =
       '<div class="panel wait-card"><div class="pulse-dot"></div><h3>Встреча готовится</h3>' +
-        '<p class="hint">Инициатор ' + esc(l.hostName) + ' собирает игроков. Как только он нажмёт «Начать», матч откроется здесь автоматически — ничего нажимать не нужно.</p></div>' +
+        '<p class="hint">Инициатор ' + esc(l.hostName) + ' собирает игроков. Как только он нажмёт «Начать», матч откроется здесь автоматически.</p></div>' +
       '<div class="panel"><div class="panel-head"><h3>Игроки</h3></div>' +
         list.map(p =>
           '<div class="wait-item">' + avatarHtml(p, 'sm') + '<span class="nm">' + esc(p.name) +
@@ -796,11 +890,7 @@
     $('match-sub').textContent = (l.format === 'tournament' ? 'Турнир 4×4' : 'Свободная встреча') +
       (bet ? ' · ' + plainMoney(bet) + (l.format === 'tournament' ? '' : '/партия') : '');
 
-    if (l.status !== 'live' || !l.match) {
-      $('match-count').textContent = '—';
-      renderWaiting(l, body);
-      return;
-    }
+    if (l.status !== 'live' || !l.match) { $('match-count').textContent = '—'; renderWaiting(l, body); return; }
 
     const P = l.participants || [];
     const t = tally(l);
@@ -840,7 +930,7 @@
     }
 
     html += '<div class="panel"><div class="panel-head"><h3>Партия ' + gameNo + '</h3></div>';
-    if (!act) html += '<p class="hint" style="margin:0 0 10px">Вы наблюдаете за встречей — отметить победителя могут участники.</p>';
+    if (!act) html += '<p class="hint" style="margin:0 0 10px">Вы наблюдаете — отметить победителя могут участники.</p>';
     if (pair) {
       html += '<div class="win-row">' +
         '<button class="win-btn" data-w="' + pair.a + '"' + (act ? '' : ' disabled') + '>' + avatarHtml(P[pair.a]) +
@@ -848,7 +938,7 @@
         '<span class="vs-badge">VS</span>' +
         '<button class="win-btn" data-w="' + pair.b + '"' + (act ? '' : ' disabled') + '>' + avatarHtml(P[pair.b]) +
           '<span>' + esc(P[pair.b].name) + '</span><em>победил</em></button></div>' +
-        '<p class="hint">Нажми на победителя. Засчитывается первое нажатие — кто успел, тот и записал.</p>';
+        '<p class="hint">Нажми на победителя. Засчитывается первое нажатие.</p>';
       if (P.length > 2 && act) html += '<button class="text-btn" id="btn-change-pair" style="margin-top:10px">Сменить пару</button>';
     } else {
       html += '<p class="hint" style="margin:0">Кто играет эту партию? Выберите двух игроков.</p><div class="pick-row">' +
@@ -915,8 +1005,7 @@
     if (!pair || (idx !== pair.a && idx !== pair.b)) return;
     const n = games.length + 1;
     haptic('medium');
-
-    games.push({ n: n, a: pair.a, b: pair.b, w: idx, at: new Date().toISOString(), by: myId() });
+    games.push({ n, a: pair.a, b: pair.b, w: idx, at: new Date().toISOString(), by: myId() });
     l.match.pair = P.length === 2 ? { a: 0, b: 1 } : null;
     pairPick = [];
     renderMatch();
@@ -1011,7 +1100,7 @@
     openOverlay('finalOverlay');
   }
 
-  /* ---------- турнир 4×4 + Double Elimination ---------- */
+  /* ---------- турнир ---------- */
   function tournamentGames(st) {
     const out = [], n = st.names.length;
     for (let r = 0; r < n; r++) {
@@ -1080,7 +1169,7 @@
 
     const scores = Tournament.computeTotalScores(state);
     const rows = state.names.map((name, i) => ({
-      name: name, score: scores[i], net: bp.financeByPlayer[i].net,
+      name, score: scores[i], net: bp.financeByPlayer[i].net,
       tg: state.players[i] && state.players[i].telegramId
     })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
@@ -1204,10 +1293,8 @@
       return;
     }
     loadPlayersCache();
-    Api.getStats().then(function (d) {
-      statsData = d;
-      renderStats(d);
-    }).catch(function () {
+    Api.getStats().then(function (d) { statsData = d; renderStats(d); })
+    .catch(function () {
       $('stats-body').innerHTML = '<div class="empty-stats">Не удалось загрузить статистику.<br>Проверьте связь и попробуйте ещё раз.</div>';
     });
   }
@@ -1219,7 +1306,7 @@
       .filter(p => p.games > 0 || p.tournaments > 0 || String(p.telegramId) === me)
       .sort((a, b) => (String(b.telegramId) === me ? 1 : 0) - (String(a.telegramId) === me ? 1 : 0));
     if (!list.length) {
-      body.innerHTML = '<div class="empty-stats">Пока нет статистики.<br>Сыграйте первую встречу — здесь появятся винрейт и личные счёты с каждым соперником.</div>';
+      body.innerHTML = '<div class="empty-stats">Пока нет статистики.<br>Сыграйте первую встречу.</div>';
       return;
     }
     body.innerHTML = list.map((p, i) => {
@@ -1253,7 +1340,7 @@
     }));
   }
 
-  /* ---------- меню и кнопки ---------- */
+  /* ---------- меню ---------- */
   function bindStatic() {
     document.querySelectorAll('#format-chips .chip').forEach(chip => {
       chip.addEventListener('click', () => {
