@@ -380,9 +380,8 @@
       addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
       const cushH = 0.42;
-      const cushH = 0.42;
-const cushD = 0.24;
-const cushY = cushH / 2;
+      const cushD = 0.24;
+      const cushY = cushH / 2;
 
 function addCushionSeg(x, z, len, horizontal) {
   const seg = new THREE.Mesh(
