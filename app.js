@@ -427,7 +427,7 @@
       pocketDefs.forEach(pk => {
         // Боковая стенка цилиндра до уровня деревянного борта
         const wallCyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r, pk.r, 0.8, 36, 1, true),
+          new THREE.CylinderGeometry(pk.r, pk.r, 0.08, 36, 1, true),
           pocketWallMat
         );
         wallCyl.position.set(pk.x, 0.03, pk.z);
