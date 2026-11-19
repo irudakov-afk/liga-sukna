@@ -25,20 +25,28 @@
 </head>
 <body>
 
-  <!-- =========================== INTRO =========================== -->
+  <!-- INTRO 3D: JS-driven (rAF), плавный подлёт → удар → разлёт → камера в лузу -->
   <div id="intro" aria-hidden="true">
-    <div class="intro-stage">
-      <div class="intro-camera" id="intro-camera">
-        <div class="intro-table">
-          <div class="intro-felt" id="intro-felt">
-            <div class="ipk p1"></div><div class="ipk p2"></div>
-            <div class="ipk p3"></div><div class="ipk p4"></div>
-            <div class="ipk p5"></div><div class="ipk p6"></div>
+    <div class="intro-viewport">
+      <div class="intro-scene" id="intro-scene">
+        <div class="intro-table3d">
+          <div class="intro-rail intro-rail-t"></div>
+          <div class="intro-rail intro-rail-b"></div>
+          <div class="intro-rail intro-rail-l"></div>
+          <div class="intro-rail intro-rail-r"></div>
+          <div class="intro-felt3d" id="intro-felt">
+            <div class="pocket pk-tl"></div>
+            <div class="pocket pk-tr"></div>
+            <div class="pocket pk-ml"></div>
+            <div class="pocket pk-mr"></div>
+            <div class="pocket pk-bl"></div>
+            <div class="pocket pk-br"></div>
             <!-- шары и кий создаёт app.js -->
           </div>
         </div>
       </div>
     </div>
+    <div class="intro-vignette"></div>
     <div class="intro-fade" id="intro-fade"></div>
     <div class="intro-title">Лига Сукна</div>
     <div class="intro-tag">Споры между своими</div>
