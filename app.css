@@ -1,5 +1,6 @@
 /* =====================================================
    Лига Сукна — Premium theme
+   Палитра: чёрный изумруд + шампанское золото
    ===================================================== */
 :root {
   --bg: #050d0a;
@@ -43,189 +44,190 @@ body {
   background-attachment: fixed;
 }
 
-/* =====================================================
-   INTRO — вся анимация строится в JS (rAF).
-   CSS только рисует статичную сцену: рамку, сукно, лузы,
-   кий, шары. Никаких @keyframes на шарах и камере.
-   ===================================================== */
+/* ---------- INTRO 3D (JS-driven, smooth) ---------- */
 #intro {
   position: fixed; inset: 0; z-index: 9999;
-  background: #020605;
+  background: #010403;
   overflow: hidden;
   opacity: 1;
   transition: opacity 0.35s ease;
 }
-#intro.hide { opacity: 0; pointer-events: none; }
+#intro.done { opacity: 0; pointer-events: none; display: none; }
+#intro.skip .intro-viewport,
+#intro.skip .intro-title,
+#intro.skip .intro-tag,
+#intro.skip .intro-vignette { opacity: 0; transition: opacity 0.3s ease; }
+#intro.skip .intro-fade { opacity: 1 !important; }
 
-.intro-stage {
+.intro-viewport {
   position: absolute; inset: 0;
+  perspective: 1100px;
+  perspective-origin: 50% 40%;
   display: flex; align-items: center; justify-content: center;
-  perspective: 1400px;
-  perspective-origin: 50% 45%;
+  transform-style: preserve-3d;
 }
-
-.intro-camera {
-  width: 280px; height: 520px;
+.intro-scene {
+  position: relative;
+  width: 300px; height: 560px;
   transform-style: preserve-3d;
   transform-origin: 50% 50%;
   will-change: transform;
 }
-
-.intro-table {
+.intro-table3d {
   position: relative;
-  width: 280px; height: 520px;
-  border-radius: 28px;
+  width: 300px; height: 560px;
+  border-radius: 30px;
   transform-style: preserve-3d;
-  background: linear-gradient(145deg, #7a5228 0%, #3d2410 42%, #2a180a 58%, #6a4520 100%);
+  background: linear-gradient(145deg, #6e4a24 0%, #3a2412 40%, #24160a 70%, #5c3d1e 100%);
   box-shadow:
-    0 0 0 2px #140c05,
-    0 0 0 5px rgba(226, 194, 125, 0.35),
-    0 50px 80px rgba(0,0,0,0.75),
-    inset 0 2px 4px rgba(255,255,255,0.18);
+    0 0 0 2px #120a04,
+    0 0 0 5px rgba(226, 194, 125, 0.28),
+    0 60px 90px rgba(0,0,0,0.8),
+    inset 0 2px 5px rgba(255,255,255,0.15);
 }
-.intro-table::before,
-.intro-table::after {
-  content: '';
-  position: absolute; top: 50px; bottom: 50px; width: 5px; opacity: 0.85;
-  background: radial-gradient(circle, #f0d796 1.5px, transparent 2.4px) 0 0 / 5px 15% repeat-y;
-  pointer-events: none;
+.intro-rail {
+  position: absolute; z-index: 3; pointer-events: none;
+  background: linear-gradient(90deg, #5a3a1a, #8b6232 40%, #4a2e14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
 }
-.intro-table::before { left: 8px; }
-.intro-table::after { right: 8px; }
+.intro-rail-t, .intro-rail-b { left: 14px; right: 14px; height: 14px; border-radius: 4px; }
+.intro-rail-t { top: 14px; }
+.intro-rail-b { bottom: 14px; }
+.intro-rail-l, .intro-rail-r {
+  top: 14px; bottom: 14px; width: 14px; border-radius: 4px;
+  background: linear-gradient(180deg, #5a3a1a, #8b6232 40%, #4a2e14);
+}
+.intro-rail-l { left: 14px; }
+.intro-rail-r { right: 14px; }
 
-.intro-felt {
+.intro-felt3d {
   position: absolute;
-  left: 20px; top: 20px; right: 20px; bottom: 20px;
-  border-radius: 12px;
+  left: 28px; top: 28px; right: 28px; bottom: 28px;
+  border-radius: 8px;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 35%, #2ea56a 0%, #187546 50%, #0a3d26 100%);
+  transform-style: preserve-3d;
+  background:
+    radial-gradient(ellipse at 50% 32%, #2da066 0%, #176b42 52%, #0a3a24 100%);
   box-shadow:
-    inset 0 0 40px rgba(0,0,0,0.55),
-    inset 0 0 0 2px rgba(0,0,0,0.45);
+    inset 0 0 36px rgba(0,0,0,0.5),
+    inset 0 0 0 1px rgba(0,0,0,0.35);
 }
-.intro-felt::after {
+.intro-felt3d::after {
   content: '';
-  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 28%, rgba(255,255,220,0.16), transparent 60%);
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 50% 25%, rgba(255,255,220,0.14), transparent 55%);
 }
 
-/* лузы */
-.ipk {
-  position: absolute;
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  z-index: 1;
-  background: radial-gradient(circle at 50% 45%, #000 38%, #0a0a0a 100%);
-  box-shadow:
-    inset 0 4px 10px rgba(0,0,0,0.95),
-    0 0 0 2px rgba(30, 18, 8, 0.9);
+.pocket {
+  position: absolute; z-index: 1;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, #000 40%, #050505 100%);
+  box-shadow: inset 0 3px 8px #000, 0 0 0 1px rgba(20,12,6,0.9);
 }
-.ipk.p1 { left: -12px; top: -12px; }
-.ipk.p2 { right: -12px; top: -12px; }
-.ipk.p3 { left: -14px; top: calc(50% - 17px); }
-.ipk.p4 { right: -14px; top: calc(50% - 17px); }
-.ipk.p5 { left: -12px; bottom: -12px; }
-.ipk.p6 { right: -12px; bottom: -12px; }
-.ipk.hot {
-  box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 0 2px rgba(30,18,8,0.9),
-              0 0 20px 5px rgba(226,194,125,0.5);
+.pk-tl { left: -10px; top: -10px; }
+.pk-tr { right: -10px; top: -10px; }
+.pk-ml { left: -12px; top: calc(50% - 16px); }
+.pk-mr { right: -12px; top: calc(50% - 16px); }
+.pk-bl { left: -10px; bottom: -10px; }
+.pk-br { right: -10px; bottom: -10px; }
+.pocket.hot {
+  box-shadow: inset 0 3px 8px #000, 0 0 16px 3px rgba(226,194,125,0.4);
 }
 
-/* шары: положение задаёт JS inline-left/top */
-.ibl {
+/* 3D-шар */
+.ball3d {
   position: absolute;
-  left: 0; top: 0;
-  width: 22px; height: 22px;
-  margin-left: -11px; margin-top: -11px;
+  width: 26px; height: 26px;
+  margin-left: -13px; margin-top: -13px;
   border-radius: 50%;
   z-index: 2;
-  transform-origin: 50% 50%;
+  will-change: transform, left, top;
   background:
-    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0 8%, transparent 24%),
-    var(--c, #ccc);
+    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.92) 0 6%, transparent 22%),
+    radial-gradient(circle at 50% 55%, var(--c) 0%, #000 160%);
   box-shadow:
-    inset -3px -4px 6px rgba(0,0,0,0.45),
-    3px 5px 8px rgba(0,0,0,0.4);
-  transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.4,0,0.8,1);
+    inset -4px -5px 8px rgba(0,0,0,0.45),
+    inset 2px 2px 4px rgba(255,255,255,0.12),
+    4px 6px 10px rgba(0,0,0,0.4);
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.4,0,0.8,1);
 }
-.ibl.stripe {
+.ball3d.stripe {
   background:
-    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.9) 0 7%, transparent 22%),
-    linear-gradient(180deg, #f5f5ee 0 26%, var(--c, #ccc) 26% 74%, #f5f5ee 74%);
+    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.9) 0 5%, transparent 20%),
+    linear-gradient(180deg, #f2f0e8 0 24%, var(--c) 24% 76%, #f2f0e8 76%);
 }
-.ibl.cue {
-  width: 24px; height: 24px;
-  margin-left: -12px; margin-top: -12px;
+.ball3d.cue {
   z-index: 4;
-  background: radial-gradient(circle at 32% 28%, #fff 0, #f0f0ea 55%, #bdbdb4 100%);
+  width: 28px; height: 28px;
+  margin-left: -14px; margin-top: -14px;
+  background:
+    radial-gradient(circle at 30% 26%, #fff 0 8%, transparent 24%),
+    radial-gradient(circle at 50% 50%, #f4f2ea 0%, #c8c4b8 100%);
   box-shadow:
-    inset -3px -4px 6px rgba(0,0,0,0.25),
-    0 0 16px rgba(255,255,255,0.35),
-    3px 5px 8px rgba(0,0,0,0.45);
+    inset -3px -4px 6px rgba(0,0,0,0.28),
+    0 0 14px rgba(255,255,255,0.25),
+    4px 6px 10px rgba(0,0,0,0.4);
 }
-.ibl .num {
-  position: absolute; inset: 30%;
+.ball3d .num {
+  position: absolute; inset: 28%;
   border-radius: 50%;
-  background: #f4f4ee; color: #111;
-  font: 800 7px/1 var(--font);
+  background: #f4f4ee;
+  color: #111;
+  font: 800 8px/1 var(--font);
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
 }
-.ibl.cue .num { display: none; }
-
-/* уход в лузу */
-.ibl.sunk {
+.ball3d.cue .num { display: none; }
+.ball3d.sunk {
   opacity: 0;
   transform: scale(0.05);
   pointer-events: none;
 }
 
-/* кий — статично, двигает JS */
-.istick {
+.intro-stick {
   position: absolute;
-  left: 50%; top: 0;
-  width: 7px; height: 240px;
-  margin-left: -3.5px;
-  border-radius: 4px;
+  width: 6px; height: 240px;
+  left: 50%; margin-left: -3px;
+  top: 0;
+  border-radius: 3px;
   z-index: 3;
   transform-origin: 50% 100%;
   background: linear-gradient(90deg, #e8c988, #8b5a2b 55%, #4a2e12);
-  box-shadow: 2px 4px 8px rgba(0,0,0,0.55);
+  box-shadow: 2px 4px 8px rgba(0,0,0,0.5);
   opacity: 0;
   pointer-events: none;
   will-change: transform, opacity;
 }
 
+.intro-vignette {
+  position: absolute; inset: 0; z-index: 15; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 30%, rgba(0,0,0,0.55) 100%);
+}
 .intro-fade {
   position: absolute; inset: 0; z-index: 20;
   background: #000;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.4s ease;
+  will-change: opacity;
 }
-
 .intro-title {
-  position: absolute; left: 0; right: 0; bottom: 13%;
-  z-index: 25;
+  position: absolute; left: 0; right: 0; bottom: 12%; z-index: 25;
   text-align: center; font-family: var(--serif);
   font-size: clamp(22px, 7vw, 34px); text-transform: uppercase;
   letter-spacing: 0.38em; text-indent: 0.38em;
   background: linear-gradient(180deg, #fff3cf 0%, #dcb96b 60%, #a37c36 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  opacity: 0; transition: opacity 0.6s ease, transform 0.6s ease;
+  transform: translateY(10px);
 }
 .intro-tag {
-  position: absolute; left: 0; right: 0; bottom: calc(13% - 28px);
-  z-index: 25;
+  position: absolute; left: 0; right: 0; bottom: calc(12% - 28px); z-index: 25;
   text-align: center; font-size: 11px; letter-spacing: 0.34em; text-indent: 0.34em;
   text-transform: uppercase; color: var(--text-dim);
-  opacity: 0;
-  transition: opacity 0.6s ease;
+  opacity: 0; transition: opacity 0.6s ease;
 }
 .intro-title.on, .intro-tag.on { opacity: 1; transform: none; }
-
+.intro-title.off, .intro-tag.off { opacity: 0; }
 .intro-skip {
   position: absolute; right: 16px; top: calc(14px + env(safe-area-inset-top));
   z-index: 30;
@@ -234,7 +236,6 @@ body {
   font-size: 11px; letter-spacing: 0.6px; cursor: pointer;
 }
 
-/* появление UI после интро */
 body:not(.ready) .home-header,
 body:not(.ready) .me-badge,
 body:not(.ready) .sport-card,
