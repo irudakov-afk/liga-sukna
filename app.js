@@ -715,12 +715,12 @@
           camPos.set(
             THREE.MathUtils.lerp(-1.1, 0.0, flyT),
             THREE.MathUtils.lerp(6.8, 2.5, flyT),
-            THREE.MathUtils.lerp(13.5, -5.5, flyT)
+            THREE.MathUtils.lerp(13.5, -8.5, flyT)
           );
           camLook.set(
             THREE.MathUtils.lerp(0, 0, flyT),
-            THREE.MathUtils.lerp(0.25, 0.9, flyT),
-            THREE.MathUtils.lerp(-2.5, -9.5, flyT)
+            THREE.MathUtils.lerp(0.25, 2.5, flyT),
+            THREE.MathUtils.lerp(-2.5, -13.5, flyT)
           );
 
           smoothedLook.lerp(camLook, 0.28);
