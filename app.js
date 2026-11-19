@@ -23,8 +23,8 @@
       '<span class="mb big" style="--c:#d6ccae;left:60px;top:14px"></span>'
   };
   const FORMAT_HINT = {
-    free: 'От 2 до 4 игроков. Пары выбираете прямо во встрече — кто с кем играет. Считаются партии, винрейт общий и против каждого соперника.',
-    tournament: 'Ровно 4 игрока: группа «каждый с каждым» и плей-офф Double Elimination.'
+    free: '',
+    tournament: ''
   };
 
   let tgUser = null;
@@ -156,7 +156,7 @@
   function updateBadges() {
     const me = $('me-badge');
     if (me) {
-      if (tgUser && tgUser.id && !tgUser.guest) me.textContent = 'Вы: ' + tgUser.name + ' · ID ' + tgUser.id;
+      if (tgUser && tgUser.id && !tgUser.guest) me.textContent = 'Вы: ' + tgUser.name;
       else me.textContent = 'Откройте через Telegram-бота — так игра привяжется к вашему профилю';
     }
     const api = $('api-badge');
@@ -184,7 +184,7 @@
     const el = $('intro');
     const canvas = $('intro-canvas');
     const blackout = $('intro-blackout');
-    const skipBtn = $('intro-skip') || $('btn-skip-intro');
+    const skipBtn = $('btn-skip-intro');
     const hud = el ? el.querySelector('.intro-hud') : null;
     const screens = document.querySelectorAll('.screen');
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -411,80 +411,59 @@
       addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
       addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
-      // Лунки на уровне сукна, ближе к столу + полукруглый рот в борте
-      // Угловые сдвинуты по диагонали внутрь, боковые — только по X
+      // Цилиндры луз на уровне деревянного борта с коричневым оттенком, уходящим в глубину в черноту
       const pocketDefs = [
-        { x: -HALF_W + 0.28, z: -HALF_L + 0.28, r: 0.70, rot: Math.PI * 0.25 },  // дальний левый
-        { x:  HALF_W - 0.28, z: -HALF_L + 0.28, r: 0.70, rot: Math.PI * 0.75 },  // дальний правый
-        { x: -HALF_W + 0.22, z: 0,              r: 0.58, rot: 0 },                 // боковая левая
-        { x:  HALF_W - 0.22, z: 0,              r: 0.58, rot: Math.PI },           // боковая правая
-        { x: -HALF_W + 0.28, z:  HALF_L - 0.28, r: 0.70, rot: -Math.PI * 0.25 }, // ближний левый
-        { x:  HALF_W - 0.28, z:  HALF_L - 0.28, r: 0.70, rot: -Math.PI * 0.75 }  // ближний правый
+        { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.68 },
+        { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.68 },
+        { x: -HALF_W + 0.08, z: 0,              r: 0.60 },
+        { x:  HALF_W - 0.08, z: 0,              r: 0.60 },
+        { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.68 },
+        { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.68 }
       ];
 
-      pocketDefs.forEach(pk => {
-        // Тёмное отверстие лузы строго на уровне сукна
-        const hole = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.95, 40),
-          pocketGradMat
-        );
-        hole.rotation.x = -Math.PI / 2;
-        hole.position.set(pk.x, 0.004, pk.z);
-        hole.receiveShadow = true;
-        scene.add(hole);
+      const cylinderTopY = railY + RAIL_H / 2; // ровно на уровне верхнего края деревянного борта
+      const cylinderH = cylinderTopY + 0.02;
 
-        // Короткая стенка, уходящая вниз под сукно
-        const well = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r * 0.95, pk.r * 0.80, 0.16, 36, 1, true),
+      pocketDefs.forEach(pk => {
+        // Боковая стенка цилиндра до уровня деревянного борта
+        const wallCyl = new THREE.Mesh(
+          new THREE.CylinderGeometry(pk.r, pk.r, 0.08, 36, 1, true),
           pocketWallMat
         );
-        well.position.set(pk.x, -0.06, pk.z);
-        well.castShadow = true;
-        well.receiveShadow = true;
-        scene.add(well);
+        wallCyl.position.set(pk.x, 0.03, pk.z);
+        wallCyl.castShadow = true;
+        wallCyl.receiveShadow = true;
+        scene.add(wallCyl);
 
-        // Дно лузы
-        const bottom = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.80, 32),
+        // Верхняя крышка цилиндра на уровне борта с градиентом от коричневого вглубь к чёрному
+        const topCap = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r, 36),
           pocketGradMat
         );
-        bottom.rotation.x = -Math.PI / 2;
-        bottom.position.set(pk.x, -0.14, pk.z);
-        scene.add(bottom);
+        topCap.rotation.x = -Math.PI / 2;
+        topCap.position.set(pk.x, 0.062, pk.z);
+        topCap.receiveShadow = true;
+        scene.add(topCap);
 
-        // Кожаный ободок — вровень с сукном
-        const leatherRim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r * 0.97, 0.038, 10, 36),
+        // Дно лузы на уровне сукна
+        const baseWell = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r, 36),
+          pocketGradMat
+        );
+        baseWell.rotation.x = -Math.PI / 2;
+        baseWell.position.set(pk.x, 0.008, pk.z);
+        scene.add(baseWell);
+
+        // Кожаный ободок лузы
+        const trim = new THREE.Mesh(
+          new THREE.TorusGeometry(pk.r, 0.052, 12, 36),
           leatherMat
         );
-        leatherRim.rotation.x = Math.PI / 2;
-        leatherRim.position.set(pk.x, 0.018, pk.z);
-        leatherRim.castShadow = true;
-        leatherRim.receiveShadow = true;
-        scene.add(leatherRim);
-
-        // Полукруглый деревянный рот (челюсть) — низкий, почти вровень с сукном
-        const jawR = pk.r + 0.06;
-        const jaw = new THREE.Mesh(
-          new THREE.CylinderGeometry(jawR, jawR, 0.12, 28, 1, true, 0, Math.PI),
-          woodMat
-        );
-        jaw.position.set(pk.x, 0.07, pk.z);
-        jaw.rotation.y = pk.rot;
-        jaw.castShadow = true;
-        jaw.receiveShadow = true;
-        scene.add(jaw);
-
-        // Тонкая верхняя кромка челюсти
-        const jawTop = new THREE.Mesh(
-          new THREE.TorusGeometry(jawR, 0.028, 8, 24, Math.PI),
-          woodMat
-        );
-        jawTop.rotation.x = Math.PI / 2;
-        jawTop.rotation.z = pk.rot;
-        jawTop.position.set(pk.x, 0.125, pk.z);
-        jawTop.castShadow = true;
-        scene.add(jawTop);
+        trim.rotation.x = Math.PI / 2;
+        trim.position.set(pk.x, 0.052, pk.z);
+        trim.castShadow = true;
+        trim.receiveShadow = true;
+        scene.add(trim);
       });
 
       // Отбойники (cushions)
@@ -797,33 +776,27 @@
           const startY = isPortrait ? 10.2 : 6.8;
           const startZ = isPortrait ? 22.5 : 14.5;
 
-          const endX = 0.0;
-          const endY = isPortrait ? 5.4 : 3.8;
-          const endZ = isPortrait ? -7.5 : -6.0;
-          const endLookY = isPortrait ? 1.5 : 1.7;
-          const endLookZ = isPortrait ? -16.0 : -14.5;
-
           const flyT = easeInOutSine(p);
           camPos.set(
-            THREE.MathUtils.lerp(startX, endX, flyT),
-            THREE.MathUtils.lerp(startY, endY, flyT),
-            THREE.MathUtils.lerp(startZ, endZ, flyT)
+            THREE.MathUtils.lerp(startX, 0.0, flyT),
+            THREE.MathUtils.lerp(startY, 4.2, flyT),
+            THREE.MathUtils.lerp(startZ, -4.5, flyT)
           );
           camLook.set(
             THREE.MathUtils.lerp(0, 0, flyT),
-            THREE.MathUtils.lerp(1.1, endLookY, flyT),
-            THREE.MathUtils.lerp(-3.5, endLookZ, flyT)
+            THREE.MathUtils.lerp(1.1, 2.2, flyT),
+            THREE.MathUtils.lerp(-3.5, -13.5, flyT)
           );
 
-          smoothedLook.lerp(camLook, 0.18);
+          smoothedLook.lerp(camLook, 0.22);
           camera.position.copy(camPos);
           camera.lookAt(smoothedLook);
 
-          if (p > 0.86) {
-            const fadeT = clamp((p - 0.86) / 0.14, 0, 1);
+          if (p > 0.78) {
+            const fadeT = clamp((p - 0.78) / 0.22, 0, 1);
             setMenuOpacity(fadeT);
             if (hud) hud.style.opacity = String(1 - fadeT);
-            el.style.opacity = String(1 - fadeT * 0.4);
+            el.style.opacity = String(1 - fadeT * 0.35);
           }
 
           renderer.render(scene, camera);
@@ -902,7 +875,11 @@
 
   function updateSetupForm() {
     const free = selectedFormat === 'free';
-    $('format-hint').textContent = FORMAT_HINT[selectedFormat];
+    const fh = $('format-hint');
+    if (fh) {
+      fh.textContent = FORMAT_HINT[selectedFormat] || '';
+      fh.style.display = FORMAT_HINT[selectedFormat] ? '' : 'none';
+    }
     $('bet-label').textContent = free ? 'Ставка за партию (0 — без денег)' : 'Ставка за проигрыш';
     $('players-label').textContent = free ? 'Участники (2–4 игрока)' : 'Участники (ровно 4)';
 
@@ -914,12 +891,11 @@
         '<div class="host-info">' +
           '<input type="text" id="host-name" value="' + esc(hostName) + '" maxlength="24"' + (real ? ' readonly' : '') + '>' +
           '<div class="hint" style="margin:0">Вы · инициатор' +
-            (real ? ' · ID ' + esc(tgUser.id) : ' · откройте через бота, чтобы звать друзей') + '</div>' +
+            (real ? '' : ' · откройте через бота, чтобы звать друзей') + '</div>' +
         '</div></div>' +
       '<div class="field-block"><label>Позвать из бота</label>' +
         '<div id="roster-grid" class="roster-grid"><div class="hint">Загрузка…</div></div>' +
-        '<div id="picked-list" class="picked-list"></div>' +
-        '<p class="hint">В списке те, кто хотя бы раз нажал Start у бота. Нажми на карточку — игроку уйдёт приглашение, и он сразу попадёт в матч.</p></div>' +
+        '<div id="picked-list" class="picked-list"></div></div>' +
       '<div class="field-block"><label>Или добавь игрока вручную</label>' +
         '<div id="manual-players"></div>' +
         '<button type="button" class="chip" id="btn-add-manual">＋ Ещё игрок</button></div>';
