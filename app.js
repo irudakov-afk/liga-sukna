@@ -411,76 +411,78 @@
       addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
       addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
-      // Лунки на уровне сукна + полукруглый «рот» (челюсть) в деревянном борте
+      // Лунки на уровне сукна, ближе к столу + полукруглый рот в борте
+      // Угловые сдвинуты по диагонали внутрь, боковые — только по X
       const pocketDefs = [
-        { x: -HALF_W + 0.05, z: -HALF_L + 0.05, r: 0.72, corner: true,  rot: Math.PI * 0.25 },
-        { x:  HALF_W - 0.05, z: -HALF_L + 0.05, r: 0.72, corner: true,  rot: Math.PI * 0.75 },
-        { x: -HALF_W + 0.02, z: 0,              r: 0.62, corner: false, rot: Math.PI * 0.0  },
-        { x:  HALF_W - 0.02, z: 0,              r: 0.62, corner: false, rot: Math.PI * 1.0  },
-        { x: -HALF_W + 0.05, z:  HALF_L - 0.05, r: 0.72, corner: true,  rot: -Math.PI * 0.25 },
-        { x:  HALF_W - 0.05, z:  HALF_L - 0.05, r: 0.72, corner: true,  rot: -Math.PI * 0.75 }
+        { x: -HALF_W + 0.28, z: -HALF_L + 0.28, r: 0.70, rot: Math.PI * 0.25 },  // дальний левый
+        { x:  HALF_W - 0.28, z: -HALF_L + 0.28, r: 0.70, rot: Math.PI * 0.75 },  // дальний правый
+        { x: -HALF_W + 0.22, z: 0,              r: 0.58, rot: 0 },                 // боковая левая
+        { x:  HALF_W - 0.22, z: 0,              r: 0.58, rot: Math.PI },           // боковая правая
+        { x: -HALF_W + 0.28, z:  HALF_L - 0.28, r: 0.70, rot: -Math.PI * 0.25 }, // ближний левый
+        { x:  HALF_W - 0.28, z:  HALF_L - 0.28, r: 0.70, rot: -Math.PI * 0.75 }  // ближний правый
       ];
 
       pocketDefs.forEach(pk => {
-        // Тёмное отверстие лузы на уровне сукна
+        // Тёмное отверстие лузы строго на уровне сукна
         const hole = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.92, 40),
+          new THREE.CircleGeometry(pk.r * 0.95, 40),
           pocketGradMat
         );
         hole.rotation.x = -Math.PI / 2;
-        hole.position.set(pk.x, 0.006, pk.z);
+        hole.position.set(pk.x, 0.004, pk.z);
         hole.receiveShadow = true;
         scene.add(hole);
 
-        // Короткая стенка лузы, уходящая вниз
+        // Короткая стенка, уходящая вниз под сукно
         const well = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r * 0.92, pk.r * 0.78, 0.18, 36, 1, true),
+          new THREE.CylinderGeometry(pk.r * 0.95, pk.r * 0.80, 0.16, 36, 1, true),
           pocketWallMat
         );
-        well.position.set(pk.x, -0.07, pk.z);
+        well.position.set(pk.x, -0.06, pk.z);
         well.castShadow = true;
         well.receiveShadow = true;
         scene.add(well);
 
-        // Дно
+        // Дно лузы
         const bottom = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.78, 32),
+          new THREE.CircleGeometry(pk.r * 0.80, 32),
           pocketGradMat
         );
         bottom.rotation.x = -Math.PI / 2;
-        bottom.position.set(pk.x, -0.155, pk.z);
+        bottom.position.set(pk.x, -0.14, pk.z);
         scene.add(bottom);
 
-        // Кожаный ободок на уровне сукна
+        // Кожаный ободок — вровень с сукном
         const leatherRim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r * 0.95, 0.045, 10, 36),
+          new THREE.TorusGeometry(pk.r * 0.97, 0.038, 10, 36),
           leatherMat
         );
         leatherRim.rotation.x = Math.PI / 2;
-        leatherRim.position.set(pk.x, 0.028, pk.z);
+        leatherRim.position.set(pk.x, 0.018, pk.z);
         leatherRim.castShadow = true;
         leatherRim.receiveShadow = true;
         scene.add(leatherRim);
 
-        // Полукруглый деревянный «рот» лузы (челюсть), сидит в борте
-        // Открытая часть цилиндра смотрит внутрь стола
-        const jawR = pk.r + 0.08;
-        const jawGeo = new THREE.CylinderGeometry(jawR, jawR, 0.22, 28, 1, true, 0, Math.PI);
-        const jaw = new THREE.Mesh(jawGeo, woodMat);
-        jaw.position.set(pk.x, 0.14, pk.z);
+        // Полукруглый деревянный рот (челюсть) — низкий, почти вровень с сукном
+        const jawR = pk.r + 0.06;
+        const jaw = new THREE.Mesh(
+          new THREE.CylinderGeometry(jawR, jawR, 0.12, 28, 1, true, 0, Math.PI),
+          woodMat
+        );
+        jaw.position.set(pk.x, 0.07, pk.z);
         jaw.rotation.y = pk.rot;
         jaw.castShadow = true;
         jaw.receiveShadow = true;
         scene.add(jaw);
 
-        // Верхняя кромка челюсти (тонкое кольцо)
+        // Тонкая верхняя кромка челюсти
         const jawTop = new THREE.Mesh(
-          new THREE.TorusGeometry(jawR, 0.035, 8, 24, Math.PI),
+          new THREE.TorusGeometry(jawR, 0.028, 8, 24, Math.PI),
           woodMat
         );
         jawTop.rotation.x = Math.PI / 2;
         jawTop.rotation.z = pk.rot;
-        jawTop.position.set(pk.x, 0.25, pk.z);
+        jawTop.position.set(pk.x, 0.125, pk.z);
         jawTop.castShadow = true;
         scene.add(jawTop);
       });
@@ -795,7 +797,6 @@
           const startY = isPortrait ? 10.2 : 6.8;
           const startZ = isPortrait ? 22.5 : 14.5;
 
-          // Конечная позиция — камера пролетает ближний борт
           const endX = 0.0;
           const endY = isPortrait ? 5.4 : 3.8;
           const endZ = isPortrait ? -7.5 : -6.0;
@@ -818,7 +819,6 @@
           camera.position.copy(camPos);
           camera.lookAt(smoothedLook);
 
-          // Меню появляется только в самом конце, когда камера уже за бортом
           if (p > 0.86) {
             const fadeT = clamp((p - 0.86) / 0.14, 0, 1);
             setMenuOpacity(fadeT);
