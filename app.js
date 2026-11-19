@@ -17,7 +17,7 @@
       '<span class="mb big" style="--c:#d6ccae;left:60px;top:14px"></span>'
   };
   const FORMAT_HINT = {
-    free: 'От 2 до 4 игроков. Пары выбираете прямо во встрече — кто с кем играет.',
+    free: 'От 2 до 4 игроков. Пары выбираете прямо во встрече — кто с кем играет. Считаются партии, винрейт общий и против каждого соперника.',
     tournament: 'Ровно 4 игрока: группа «каждый с каждым» и плей-офф Double Elimination.'
   };
 
@@ -171,9 +171,9 @@
   }
 
   /* =====================================================
-     ИНТРО: полностью на rAF.
-     CSS только рисует статику (рамка, сукно, лузы, кий, шары).
-     JS считает позиции, физику и камеру.
+     ИНТРО (rAF): подлёт к битку → удар → разлёт → целевой
+     шар в лузу → камера за ним → затемнение.
+     Всё на JS, никаких CSS-@keyframes на шарах/камере.
      ===================================================== */
   function runIntro() {
     const root = $('intro');
@@ -184,29 +184,28 @@
       return;
     }
 
-    const stage = root.querySelector('.intro-stage');
-    const camEl = $('intro-camera');
+    const scene = $('intro-scene');
     const felt = $('intro-felt');
     const fade = $('intro-fade');
     const title = root.querySelector('.intro-title');
     const tag = root.querySelector('.intro-tag');
     const skip = $('intro-skip');
-    if (!camEl || !felt) { root.remove(); document.body.classList.add('ready'); return; }
+    if (!scene || !felt) { root.remove(); document.body.classList.add('ready'); return; }
 
-    // ждём кадр, чтобы felt получил размеры
+    // стартуем на следующем кадре — чтобы felt получил размеры
     requestAnimationFrame(function () {
-      const FW = felt.clientWidth || 240;
-      const FH = felt.clientHeight || 480;
-      const R = 11;          // радиус шара (22px)
-      const POCKET_R = 16;   // радиус «успешного» провала в лузу
+      const FW = felt.clientWidth || 244;
+      const FH = felt.clientHeight || 504;
+      const R = 13;              // радиус шара
+      const POCKET_R = 16;       // радиус, при котором шар «тонет»
       const minX = R + 2, maxX = FW - R - 2;
       const minY = R + 2, maxY = FH - R - 2;
 
-      const D = 22;              // дистанция в пирамиде
+      const D = 24;
       const rackCx = FW / 2;
       const rackCy = FH * 0.30;
       const cueStart = { x: FW / 2, y: FH * 0.76 };
-      const pocket = { x: 5, y: 5 }; // левая верхняя луза
+      const pocket = { x: 5, y: 5 }; // левая-верхняя луза в координатах felt
 
       const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
       const balls = [];
@@ -215,7 +214,7 @@
 
       function makeBall(o) {
         const el = document.createElement('div');
-        el.className = 'ibl' + (o.stripe ? ' stripe' : '') + (o.cue ? ' cue' : '');
+        el.className = 'ball3d' + (o.stripe ? ' stripe' : '') + (o.cue ? ' cue' : '');
         el.style.setProperty('--c', o.color);
         if (o.num != null && !o.cue) {
           const n = document.createElement('span');
@@ -255,34 +254,63 @@
 
       // кий
       const stick = document.createElement('div');
-      stick.className = 'istick';
+      stick.className = 'intro-stick';
       felt.appendChild(stick);
 
-      // --- камера ---
-      const cam = { x: 0, y: 60, z: -900, rotX: 60, rotZ: -16, scale: 0.55 };
+      // камера (позиция в координатах .intro-scene)
+      const cam = { x: 40, y: 120, z: -1400, rotX: 70, rotZ: -32, scale: 0.5 };
       function applyCam() {
-        camEl.style.transform =
+        scene.style.transform =
           'translate3d(' + cam.x.toFixed(2) + 'px,' + cam.y.toFixed(2) + 'px,' + cam.z.toFixed(2) + 'px) ' +
           'rotateX(' + cam.rotX.toFixed(2) + 'deg) rotateZ(' + cam.rotZ.toFixed(2) + 'deg) ' +
           'scale(' + cam.scale.toFixed(3) + ')';
       }
       applyCam();
 
-      // --- физика ---
+      function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+      function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+      function easeIn(t) { return t * t * t; }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+
+      // временные фазы (сек)
+      const T_APPROACH = 1.65;
+      const T_SHOT = 2.05;
+      const T_BREAK = 2.85;
+      const T_POCKET = 4.55;
+      const T_END = 5.45;
+
+      let started = false, shotDone = false, ended = false;
+      let raf = 0, t0 = 0;
+
+      function endIntro(fast) {
+        if (ended) return;
+        ended = true;
+        if (raf) cancelAnimationFrame(raf);
+        root.classList.add(fast ? 'skip' : 'done');
+        if (fade) fade.style.opacity = '1';
+        document.body.classList.add('ready');
+        setTimeout(function () {
+          try { root.remove(); } catch (e) {}
+        }, fast ? 350 : 200);
+      }
+
       function fireShot() {
+        if (shotDone) return;
+        shotDone = true;
         const dx = rackCx - cueBall.x;
         const dy = rackCy - cueBall.y;
-        const len = Math.hypot(dx, dy) || 1;
-        cueBall.vx = (dx / len) * 900;
-        cueBall.vy = (dy / len) * 900;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        cueBall.vx = (dx / len) * 920;
+        cueBall.vy = (dy / len) * 920;
+
         balls.forEach(b => {
           if (b.cue || b.sunk) return;
           if (b.target) {
             const tx = pocket.x - b.x;
             const ty = pocket.y - b.y;
-            const tl = Math.hypot(tx, ty) || 1;
-            b.vx = (tx / tl) * 320;
-            b.vy = (ty / tl) * 320;
+            const tl = Math.sqrt(tx * tx + ty * ty) || 1;
+            b.vx = (tx / tl) * 380;
+            b.vy = (ty / tl) * 380;
           } else {
             const ang = Math.atan2(b.y - rackCy, b.x - rackCx) + (Math.random() - 0.5) * 0.9;
             const sp = 120 + Math.random() * 220;
@@ -290,8 +318,13 @@
             b.vy = Math.sin(ang) * sp - 40;
           }
         });
-        // кий уходит
-        stick.style.opacity = '0';
+
+        if (stick) {
+          stick.style.transition = 'opacity 0.25s';
+          stick.style.opacity = '0';
+        }
+        const pk = felt.querySelector('.pk-tl');
+        if (pk) pk.classList.add('hot');
       }
 
       function stepPhysics(dt) {
@@ -302,6 +335,7 @@
           b.y += b.vy * dt;
           b.vx *= fr;
           b.vy *= fr;
+
           if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * 0.35; }
           if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * 0.35; }
           if (b.y < minY) { b.y = minY; b.vy = Math.abs(b.vy) * 0.35; }
@@ -309,7 +343,7 @@
 
           if (b.target) {
             const ddx = b.x - pocket.x, ddy = b.y - pocket.y;
-            const dist = Math.hypot(ddx, ddy);
+            const dist = Math.sqrt(ddx * ddx + ddy * ddy);
             if (dist < 48) { b.vx += -ddx * 14 * dt * 60; b.vy += -ddy * 14 * dt * 60; }
             if (dist < POCKET_R) {
               b.sunk = true;
@@ -319,15 +353,17 @@
               requestAnimationFrame(() => b.el.classList.add('sunk'));
             }
           }
+
+          b.el.style.left = b.x + 'px';
+          b.el.style.top = b.y + 'px';
         });
 
-        // столкновения
         for (let i = 0; i < balls.length; i++) {
           for (let j = i + 1; j < balls.length; j++) {
             const a = balls[i], c = balls[j];
             if (a.sunk || c.sunk) continue;
             const dx = c.x - a.x, dy = c.y - a.y;
-            const dist = Math.hypot(dx, dy) || 0.01;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
             const minD = R * 2;
             if (dist < minD) {
               const nx = dx / dist, ny = dy / dist;
@@ -343,58 +379,34 @@
             }
           }
         }
-
-        // рисуем
-        balls.forEach(b => {
-          if (b.sunk) return;
-          b.el.style.left = b.x + 'px';
-          b.el.style.top = b.y + 'px';
-        });
       }
-
-      // --- таймлайн ---
-      const T_APPROACH = 1.4;   // подлёт к битку
-      const T_SHOT     = 1.9;   // удар
-      const T_BREAK    = 2.6;   // разбивка устаканилась
-      const T_CENTER   = 4.2;   // камера в центре стола
-      const T_END      = 4.8;   // затемнение, финиш
-
-      let t0 = 0;
-      let started = false;
-      let shotDone = false;
-      let ended = false;
-      let raf = 0;
-
-      function easeInOut(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; }
-      function easeOut(t) { return 1 - Math.pow(1-t, 3); }
-      function lerp(a, b, t) { return a + (b - a) * t; }
 
       function setCamApproach(u) {
         const t = easeInOut(clamp(u, 0, 1));
-        cam.x = lerp(0, 0, t);
-        cam.y = lerp(60, 20, t);
-        cam.z = lerp(-900, -220, t);
-        cam.rotX = lerp(60, 50, t);
-        cam.rotZ = lerp(-16, -4, t);
-        cam.scale = lerp(0.55, 1.05, t);
+        cam.x = lerp(55, 8, t);
+        cam.y = lerp(140, 30, t);
+        cam.z = lerp(-1500, -220, t);
+        cam.rotX = lerp(72, 54, t);
+        cam.rotZ = lerp(-34, -6, t);
+        cam.scale = lerp(0.48, 1.05, t);
       }
-      function setCamCenter(u) {
+      function setCamFollowTarget(u) {
         const t = easeInOut(clamp(u, 0, 1));
-        cam.x = lerp(0, 0, t);
-        cam.y = lerp(20, 0, t);
-        cam.z = lerp(-220, -60, t);
-        cam.rotX = lerp(50, 44, t);
-        cam.rotZ = lerp(-4, 0, t);
-        cam.scale = lerp(1.05, 1.35, t);
+        const focusX = targetBall ? (targetBall.x - FW / 2) : -FW * 0.35;
+        const focusY = targetBall ? (targetBall.y - FH / 2) : -FH * 0.35;
+        cam.x = lerp(0, -focusX * 1.1 - 40, t);
+        cam.y = lerp(20, -focusY * 1.05 - 80, t);
+        cam.z = lerp(-120, 520, t);
+        cam.rotX = lerp(52, 8, t);
+        cam.rotZ = lerp(0, 12, t);
+        cam.scale = lerp(1.1, 4.2, t);
       }
-
-      function finish(skipMode) {
-        if (ended) return;
-        ended = true;
-        if (raf) cancelAnimationFrame(raf);
-        root.classList.add('hide');
-        document.body.classList.add('ready');
-        setTimeout(() => { try { root.remove(); } catch (e) {} }, 380);
+      function setCamDive(u) {
+        const t = easeIn(clamp(u, 0, 1));
+        cam.z = lerp(520, 1100, t);
+        cam.scale = lerp(4.2, 8.5, t);
+        cam.rotX = lerp(8, -15, t);
+        if (fade) fade.style.opacity = String(Math.min(1, t * 1.35));
       }
 
       function frame(now) {
@@ -404,46 +416,55 @@
         const dt = Math.min(0.033, 0.016);
 
         // кий
-        if (!shotDone && t > 0.7 && t < T_SHOT) {
-          stick.style.opacity = '1';
-          const pull = t < 1.2 ? easeOut((t - 0.7) / 0.5) : Math.max(0, 1 - (t - 1.2) / 0.4);
-          const y = lerp(-30, 24, pull);
-          stick.style.transform = 'translate3d(' + cueBall.x + 'px, ' + (cueBall.y + y) + 'px, 0)';
-        }
-        if (t >= T_SHOT && !shotDone) { shotDone = true; fireShot(); }
-        if (t >= T_SHOT) stepPhysics(dt);
-
-        // камера
         if (t < T_SHOT) {
-          setCamApproach(t / T_SHOT);
+          if (t > 1.15) {
+            stick.style.opacity = '1';
+            const pull = t < 1.55 ? easeOut((t - 1.15) / 0.4) : easeIn((T_SHOT - t) / 0.5);
+            const yOff = t < 1.55 ? lerp(36, 8, pull) : lerp(8, -4, 1 - (T_SHOT - t) / 0.5);
+            stick.style.transform = 'translate3d(' + cueBall.x + 'px,' + (cueBall.y + 30 + yOff) + 'px,0)';
+            stick.style.left = '0px';
+            stick.style.top = '0px';
+          }
+        }
+
+        if (t >= T_APPROACH && !shotDone) fireShot();
+        if (t >= T_APPROACH) stepPhysics(dt);
+
+        if (t < T_APPROACH) {
+          setCamApproach(t / T_APPROACH);
         } else if (t < T_BREAK) {
-          // лёгкая стабилизация после удара
-          const u = (t - T_SHOT) / (T_BREAK - T_SHOT);
-          setCamApproach(1 - 0.15 * easeOut(u));
+          const u = (t - T_APPROACH) / (T_BREAK - T_APPROACH);
+          cam.x = lerp(8, 0, easeOut(u));
+          cam.y = lerp(30, 16, easeOut(u));
+          cam.z = lerp(-220, -120, easeOut(u));
+          cam.rotX = lerp(54, 52, u);
+          cam.rotZ = lerp(-6, 0, u);
+          cam.scale = lerp(1.05, 1.1, u);
+        } else if (t < T_POCKET) {
+          setCamFollowTarget((t - T_BREAK) / (T_POCKET - T_BREAK));
         } else {
-          const u = (t - T_BREAK) / (T_CENTER - T_BREAK);
-          setCamCenter(u);
+          setCamDive(Math.min(1, (t - T_POCKET) / (T_END - T_POCKET)));
         }
         applyCam();
 
-        // титры
         if (title && tag) {
-          if (t > 0.4 && t < 3.8) { title.classList.add('on'); tag.classList.add('on'); }
-          else { title.classList.remove('on'); tag.classList.remove('on'); }
+          if (t > 0.4 && t < 3.8) {
+            title.classList.add('on'); tag.classList.add('on');
+            title.classList.remove('off'); tag.classList.remove('off');
+          } else if (t >= 3.8) {
+            title.classList.add('off'); tag.classList.add('off');
+          }
         }
 
-        // затемнение
-        if (fade) {
-          const f = t < T_CENTER ? 0 : Math.min(1, (t - T_CENTER) / (T_END - T_CENTER));
-          fade.style.opacity = String(f);
-        }
-
-        if (t >= T_END) { finish(false); return; }
+        if (t >= T_END) { endIntro(false); return; }
         raf = requestAnimationFrame(frame);
       }
 
-      if (skip) skip.addEventListener('click', (e) => { e.stopPropagation(); finish(true); });
-      root.addEventListener('click', () => finish(true));
+      if (skip) skip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        endIntro(true);
+      });
+      root.addEventListener('click', function () { endIntro(true); });
 
       raf = requestAnimationFrame(frame);
     });
@@ -480,7 +501,7 @@
       (l.status === 'live' ? 'идёт игра' : 'ждём старт') + '</small>';
   }
 
-  /* ---------- настройка ---------- */
+  /* ---------- настройка встречи ---------- */
   function readBet() { return Math.max(0, parseInt($('setup-bet').value, 10) || 0); }
 
   function openSetup() {
@@ -522,7 +543,7 @@
       '<div class="field-block"><label>Позвать из бота</label>' +
         '<div id="roster-grid" class="roster-grid"><div class="hint">Загрузка…</div></div>' +
         '<div id="picked-list" class="picked-list"></div>' +
-        '<p class="hint">В списке те, кто хотя бы раз нажал Start у бота. Нажми на карточку — игроку уйдёт приглашение.</p></div>' +
+        '<p class="hint">В списке те, кто хотя бы раз нажал Start у бота. Нажми на карточку — игроку уйдёт приглашение, и он сразу попадёт в матч.</p></div>' +
       '<div class="field-block"><label>Или добавь игрока вручную</label>' +
         '<div id="manual-players"></div>' +
         '<button type="button" class="chip" id="btn-add-manual">＋ Ещё игрок</button></div>';
@@ -581,7 +602,7 @@
     const me = myId();
     const list = rosterList.filter(p => String(p.telegramId) !== me);
     if (!rosterList.length) {
-      grid.innerHTML = '<div class="hint">В таблице пока нет игроков. Открой бота → /start — ты появишься в базе.</div>';
+      grid.innerHTML = '<div class="hint">В таблице пока нет игроков. Открой бота → /start — ты появишься в базе. Друзья тоже должны нажать Start.</div>';
       return;
     }
     if (!list.length) {
@@ -938,7 +959,7 @@
         '<span class="vs-badge">VS</span>' +
         '<button class="win-btn" data-w="' + pair.b + '"' + (act ? '' : ' disabled') + '>' + avatarHtml(P[pair.b]) +
           '<span>' + esc(P[pair.b].name) + '</span><em>победил</em></button></div>' +
-        '<p class="hint">Нажми на победителя. Засчитывается первое нажатие.</p>';
+        '<p class="hint">Нажми на победителя. Засчитывается первое нажатие — кто успел, тот и записал.</p>';
       if (P.length > 2 && act) html += '<button class="text-btn" id="btn-change-pair" style="margin-top:10px">Сменить пару</button>';
     } else {
       html += '<p class="hint" style="margin:0">Кто играет эту партию? Выберите двух игроков.</p><div class="pick-row">' +
@@ -1005,7 +1026,7 @@
     if (!pair || (idx !== pair.a && idx !== pair.b)) return;
     const n = games.length + 1;
     haptic('medium');
-    games.push({ n, a: pair.a, b: pair.b, w: idx, at: new Date().toISOString(), by: myId() });
+    games.push({ n: n, a: pair.a, b: pair.b, w: idx, at: new Date().toISOString(), by: myId() });
     l.match.pair = P.length === 2 ? { a: 0, b: 1 } : null;
     pairPick = [];
     renderMatch();
@@ -1169,7 +1190,7 @@
 
     const scores = Tournament.computeTotalScores(state);
     const rows = state.names.map((name, i) => ({
-      name, score: scores[i], net: bp.financeByPlayer[i].net,
+      name: name, score: scores[i], net: bp.financeByPlayer[i].net,
       tg: state.players[i] && state.players[i].telegramId
     })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
