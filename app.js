@@ -207,11 +207,12 @@
 
     const FW = felt.clientWidth || 244;
     const FH = felt.clientHeight || 504;
-    const R = 13; // радиус шара
-    const minX = R + 2;
-    const maxX = FW - R - 2;
-    const minY = R + 2;
-    const maxY = FH - R - 2;
+    const R = 11;               // было 13 — под 22px шар
+const POCKET_R = 17;        // радиус лузы, в который шар «проваливается»
+const minX = R + 2;
+const maxX = FW - R - 2;
+const minY = R + 2;
+const maxY = FH - R - 2;
 
     function clampBall(x, y) {
       return {
@@ -314,11 +315,11 @@
     // 2.0–2.8  разбивка
     // 2.8–4.6  камера на цветном → в лузу
     // 4.6–5.4  темнота
-    const T_APPROACH = 1.65;
-    const T_SHOT = 2.05;
-    const T_BREAK = 2.85;
-    const T_POCKET = 4.55;
-    const T_END = 5.45;
+  const T_APPROACH = 1.6;
+const T_SHOT     = 2.0;
+const T_BREAK    = 2.6;
+const T_SETTLE   = 4.6;   // за это время камера приходит в центр
+const T_END      = 5.0;
 
     let started = false;
     let shotDone = false;
@@ -390,22 +391,31 @@
         if (b.y > maxY) { b.y = maxY; b.vy = -Math.abs(b.vy) * 0.35; }
 
         // целевой шар: если близко к лузе — «засасываем»
-        if (b.target && !b.sunk) {
-          const ddx = b.x - pocket.x;
-          const ddy = b.y - pocket.y;
-          const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (dist < 36) {
-            b.vx += (-ddx) * 8;
-            b.vy += (-ddy) * 8;
-          }
-          if (dist < 14) {
-            b.sunk = true;
-            b.el.classList.add('sunk');
-            b.x = pocket.x;
-            b.y = pocket.y;
-          }
-        }
-      });
+       // целевой шар: если близко к лузе — «проваливаемся» и исчезаем
+if (b.target && !b.sunk) {
+  const ddx = b.x - pocket.x;
+  const ddy = b.y - pocket.y;
+  const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+
+  // притягиваем к центру лузы (гравитация кармана)
+  if (dist < 48) {
+    b.vx += (-ddx) * 14 * dt * 60;
+    b.vy += (-ddy) * 14 * dt * 60;
+  }
+
+  // как только шар «вошёл» в лузу — утапливаем
+  if (dist < POCKET_R) {
+    b.sunk = true;
+    b.x = pocket.x;
+    b.y = pocket.y;
+    b.el.style.left = b.x + 'px';
+    b.el.style.top = b.y + 'px';
+    // маленькая пауза перед анимацией, чтобы шар оказался по центру кармана
+    requestAnimationFrame(() => {
+      b.el.classList.add('sunk');
+    });
+  }
+}
 
       // мягкие столкновения (упрощённо)
       for (let i = 0; i < balls.length; i++) {
@@ -435,38 +445,16 @@
     }
 
     // цели камеры по фазам
-    function setCamApproach(u) {
-      // u 0..1 — подлёт к битку
-      const t = easeInOut(u);
-      cam.x = lerp(55, 8, t);
-      cam.y = lerp(140, 30, t);
-      cam.z = lerp(-1500, -220, t);
-      cam.rotX = lerp(72, 54, t);
-      cam.rotZ = lerp(-34, -6, t);
-      cam.scale = lerp(0.48, 1.05, t);
-    }
-
-    function setCamFollowTarget(u) {
-      // u 0..1 — сопровождение цветного шара и вход в лузу
-      const t = easeInOut(u);
-      // фокус: смещаем сцену так, будто смотрим на target
-      const focusX = targetBall ? (targetBall.x - FW / 2) : -FW * 0.35;
-      const focusY = targetBall ? (targetBall.y - FH / 2) : -FH * 0.35;
-      cam.x = lerp(0, -focusX * 1.1 - 40, t);
-      cam.y = lerp(20, -focusY * 1.05 - 80, t);
-      cam.z = lerp(-120, 520, t);
-      cam.rotX = lerp(52, 8, t);
-      cam.rotZ = lerp(0, 12, t);
-      cam.scale = lerp(1.1, 4.2, t);
-    }
-
-    function setCamDive(u) {
-      const t = easeIn(u);
-      cam.z = lerp(520, 1100, t);
-      cam.scale = lerp(4.2, 8.5, t);
-      cam.rotX = lerp(8, -15, t);
-      if (fade) fade.style.opacity = String(Math.min(1, t * 1.35));
-    }
+function setCamCenter(u) {
+  // u: 0 → 1 — плавный наезд на центр стола
+  const t = easeInOut(u);
+  cam.x = lerp(40, 0, t);
+  cam.y = lerp(120, 0, t);
+  cam.z = lerp(-1400, -80, t);
+  cam.rotX = lerp(70, 50, t);   // без резкого наклона
+  cam.rotZ = lerp(-32, 0, t);
+  cam.scale = lerp(0.5, 1.25, t);
+}
 
     function frame(now) {
       if (ended) return;
@@ -486,8 +474,17 @@
         }
       }
 
-      if (t >= T_APPROACH && !shotDone) fireShot();
-      if (t >= T_APPROACH) stepPhysics(dt);
+     if (t >= T_APPROACH && !shotDone) fireShot();
+if (t >= T_APPROACH) stepPhysics(dt);
+
+if (t < T_BREAK) {
+  // фиксируем камеру после удара
+  setCamCenter(Math.min(0.35, t / T_BREAK));
+} else {
+  // плавно в центр стола
+  setCamCenter(0.35 + 0.65 * Math.min(1, (t - T_BREAK) / (T_SETTLE - T_BREAK)));
+}
+applyCam();
 
       if (t < T_APPROACH) {
         setCamApproach(t / T_APPROACH);
