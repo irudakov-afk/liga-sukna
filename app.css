@@ -44,208 +44,354 @@ body {
   background-attachment: fixed;
 }
 
-/* ---------- INTRO 3D (JS-driven, smooth) ---------- */
+/* =====================================================
+   INTRO 3D: подлёт → удар → шар в лузу → камера в лузу
+   Раскладка: .intro-table 280×520, .intro-felt 240×480.
+   Шары .ibl создаются в app.js и получают координаты
+   left/top + переменные --dx/--dy/--mid-x/--mid-y/--rot.
+   Вся анимация — CSS, JS только собирает DOM.
+   ===================================================== */
 #intro {
   position: fixed; inset: 0; z-index: 9999;
-  background: #010403;
+  background: #020605;
   overflow: hidden;
+  perspective: 1200px;
+  perspective-origin: 50% 42%;
 }
 #intro.done { pointer-events: none; }
-#intro.skip .intro-viewport,
+#intro.skip .intro-world,
 #intro.skip .intro-title,
-#intro.skip .intro-tag,
-#intro.skip .intro-vignette { opacity: 0; transition: opacity 0.3s ease; }
-#intro.skip .intro-fade { opacity: 1 !important; }
+#intro.skip .intro-tag { opacity: 0 !important; transition: opacity 0.25s ease; }
+#intro.skip .intro-fade { opacity: 1 !important; animation: none; }
 
-.intro-viewport {
+.intro-world {
   position: absolute; inset: 0;
-  perspective: 1100px;
-  perspective-origin: 50% 40%;
+  transform-style: preserve-3d;
   display: flex; align-items: center; justify-content: center;
-  transform-style: preserve-3d;
+  animation: worldHold 5.4s linear forwards;
 }
-.intro-scene {
+@keyframes worldHold {
+  0%, 88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.intro-camera {
   position: relative;
-  width: 300px; height: 560px;
+  width: 280px; height: 520px;
   transform-style: preserve-3d;
-  transform-origin: 50% 50%;
+  transform-origin: 50% 72%;
   will-change: transform;
-  /* тень «под столом» */
-  filter: drop-shadow(0 40px 60px rgba(0,0,0,0.65));
+  animation: camSequence 5.2s cubic-bezier(0.4, 0.05, 0.2, 1) forwards;
+}
+/*
+  Камера в локальных координатах стола:
+  0–18%   дальний подлёт к битку
+  18–28%  стабилизация над битком, момент удара
+  28–40%  отслеживание разбивки, чуть выше
+  40–72%  ведёт целевой шар к верхней-левой лузе
+  72–100% нырок в лузу (scale + погружение в темноту)
+*/
+@keyframes camSequence {
+  0% {
+    transform:
+      translate3d(18px, 90px, -1600px)
+      rotateX(68deg) rotateZ(-28deg) scale(0.55);
+  }
+  18% {
+    transform:
+      translate3d(8px, 40px, -520px)
+      rotateX(58deg) rotateZ(-10deg) scale(0.9);
+  }
+  28% {
+    transform:
+      translate3d(4px, 18px, -180px)
+      rotateX(52deg) rotateZ(-3deg) scale(1.05);
+  }
+  40% {
+    transform:
+      translate3d(-6px, 8px, -40px)
+      rotateX(48deg) rotateZ(2deg) scale(1.12);
+  }
+  55% {
+    transform:
+      translate3d(-70px, -120px, 80px)
+      rotateX(42deg) rotateZ(8deg) scale(1.35);
+  }
+  72% {
+    transform:
+      translate3d(-118px, -210px, 220px)
+      rotateX(28deg) rotateZ(14deg) scale(1.9);
+  }
+  88% {
+    transform:
+      translate3d(-132px, -248px, 480px)
+      rotateX(8deg) rotateZ(6deg) scale(3.4);
+  }
+  100% {
+    transform:
+      translate3d(-140px, -260px, 900px)
+      rotateX(-12deg) rotateZ(0deg) scale(6.5);
+  }
 }
 
-.intro-table3d {
+.intro-table {
   position: relative;
-  width: 300px; height: 560px;
-  border-radius: 30px;
+  width: 280px; height: 520px;
+  border-radius: 28px;
   transform-style: preserve-3d;
   background:
-    linear-gradient(145deg, #7a5528 0%, #4a2d15 35%, #2a1a0b 70%, #6b4820 100%);
+    linear-gradient(145deg, #7a5228 0%, #3d2410 42%, #2a180a 58%, #6a4520 100%);
   box-shadow:
-    0 0 0 2px #120a04,
-    0 0 0 6px rgba(226, 194, 125, 0.30),
-    0 0 0 8px rgba(0,0,0,0.55),
-    0 70px 100px rgba(0,0,0,0.85),
-    inset 0 3px 6px rgba(255,255,255,0.18),
-    inset 0 -6px 10px rgba(0,0,0,0.55);
+    0 0 0 2px #140c05,
+    0 0 0 4px rgba(226, 194, 125, 0.35),
+    0 50px 80px rgba(0,0,0,0.75),
+    inset 0 2px 4px rgba(255,255,255,0.18);
 }
-
-/* Борта — с объёмной фаской */
-.intro-rail {
-  position: absolute; z-index: 3; pointer-events: none;
-  background:
-    linear-gradient(180deg, #a67840 0%, #7a5222 30%, #4a2e14 70%, #2a1a0a 100%);
-  box-shadow:
-    inset 0 2px 0 rgba(255,255,255,0.22),
-    inset 0 -3px 6px rgba(0,0,0,0.5),
-    0 4px 8px rgba(0,0,0,0.45);
-  border-radius: 5px;
-}
-.intro-rail-t, .intro-rail-b { left: 12px; right: 12px; height: 16px; }
-.intro-rail-t { top: 12px; }
-.intro-rail-b { bottom: 12px; }
-.intro-rail-l, .intro-rail-r {
-  top: 12px; bottom: 12px; width: 16px;
-  background: linear-gradient(90deg, #a67840 0%, #7a5222 30%, #4a2e14 70%, #2a1a0a 100%);
-}
-.intro-rail-l { left: 12px; }
-.intro-rail-r { right: 12px; }
-
-.intro-felt3d {
-  position: absolute;
-  left: 26px; top: 26px; right: 26px; bottom: 26px;
-  border-radius: 8px;
-  overflow: hidden;
-  transform-style: preserve-3d;
-  background:
-    radial-gradient(ellipse at 50% 32%, #2da066 0%, #176b42 52%, #0a3a24 100%);
-  box-shadow:
-    inset 0 0 50px rgba(0,0,0,0.55),
-    inset 0 0 0 2px rgba(0,0,0,0.55),
-    inset 0 6px 14px rgba(0,0,0,0.35);
-}
-.intro-felt3d::after {
+.intro-table::before,
+.intro-table::after {
   content: '';
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse at 50% 25%, rgba(255,255,220,0.14), transparent 55%);
+  position: absolute; top: 50px; bottom: 50px; width: 5px; opacity: 0.85;
+  background: radial-gradient(circle, #f0d796 1.5px, transparent 2.4px) 0 0 / 5px 15% repeat-y;
+  pointer-events: none;
 }
+.intro-table::before { left: 8px; }
+.intro-table::after { right: 8px; }
 
-  position: absolute; z-index: 1;
-  width: 34px; height: 34px; border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 38%, #000 0 30%, #040404 55%, #0a0806 100%);
-  box-shadow:
-    inset 0 6px 14px #000,
-    inset 0 -2px 4px rgba(255,255,255,0.04),
-    0 0 0 2px rgba(20,12,6,0.95),
-    0 0 10px rgba(0,0,0,0.6);
-}
-.pk-tl { left: -10px; top: -10px; }
-.pk-tr { right: -10px; top: -10px; }
-.pk-ml { left: -12px; top: calc(50% - 16px); }
-.pk-mr { right: -12px; top: calc(50% - 16px); }
-.pk-bl { left: -10px; bottom: -10px; }
-.pk-br { right: -10px; bottom: -10px; }
-.pocket.hot {
-  box-shadow: inset 0 3px 8px #000, 0 0 16px 3px rgba(226,194,125,0.4);
-}
-
-/* 3D-шар: сфера из градиентов + блик + тень */
-.ball3d {
+.intro-felt {
   position: absolute;
-  width: 22px; height: 22px;
-  margin-left: -11px; margin-top: -11px;
+  left: 20px; top: 20px; right: 20px; bottom: 20px;
+  border-radius: 12px;
+  transform-style: preserve-3d;
+  background:
+    radial-gradient(ellipse at 50% 35%, #2ea56a 0%, #187546 50%, #0a3d26 100%);
+  box-shadow:
+    inset 0 0 40px rgba(0,0,0,0.55),
+    inset 0 0 0 2px rgba(0,0,0,0.45);
+  overflow: hidden;
+}
+.intro-felt::after {
+  content: '';
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 28%, rgba(255,255,220,0.18), transparent 60%);
+}
+
+/* лузы */
+.ipk {
+  position: absolute;
+  width: 34px; height: 34px;
   border-radius: 50%;
-  z-index: 2;
-  transform: translate3d(0,0,0);
-  will-change: transform, left, top;
-  background:
-    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.92) 0 6%, transparent 22%),
-    radial-gradient(circle at 50% 55%, var(--c) 0%, #000 160%);
+  z-index: 1;
+  background: radial-gradient(circle at 50% 45%, #000 38%, #0a0a0a 100%);
   box-shadow:
-    inset -4px -5px 8px rgba(0,0,0,0.45),
-    inset 2px 2px 4px rgba(255,255,255,0.12),
-    4px 6px 10px rgba(0,0,0,0.4);
+    inset 0 4px 10px rgba(0,0,0,0.95),
+    0 0 0 2px rgba(30, 18, 8, 0.9);
 }
-.ball3d.stripe {
-  background:
-    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.9) 0 5%, transparent 20%),
-    linear-gradient(180deg, #f2f0e8 0 24%, var(--c) 24% 76%, #f2f0e8 76%);
-  box-shadow:
-    inset -4px -5px 8px rgba(0,0,0,0.4),
-    4px 6px 10px rgba(0,0,0,0.4);
+.ipk.p1 { left: -12px; top: -12px; }
+.ipk.p2 { right: -12px; top: -12px; }
+.ipk.p3 { left: -14px; top: calc(50% - 17px); }
+.ipk.p4 { right: -14px; top: calc(50% - 17px); }
+.ipk.p5 { left: -12px; bottom: -12px; }
+.ipk.p6 { right: -12px; bottom: -12px; }
+
+/* целевая луза подсвечивается к моменту, когда туда летит шар */
+.ipk.p1 {
+  animation: pocketGlow 5.2s ease forwards;
 }
-.ball3d.cue {
-  z-index: 4;
+@keyframes pocketGlow {
+  0%, 55% { box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 0 2px rgba(30,18,8,0.9); }
+  70%, 85% { box-shadow: inset 0 4px 10px rgba(0,0,0,0.95), 0 0 18px 4px rgba(226,194,125,0.45); }
+  100% { box-shadow: inset 0 0 30px #000, 0 0 40px 8px rgba(0,0,0,0.9); }
+}
+
+/* шары (позиция задаётся JS, анимация — CSS) */
+.ibl {
+  position: absolute;
   width: 24px; height: 24px;
   margin-left: -12px; margin-top: -12px;
+  border-radius: 50%;
+  z-index: 2;
+  transform-style: preserve-3d;
   background:
-    radial-gradient(circle at 30% 26%, #fff 0 8%, transparent 24%),
-    radial-gradient(circle at 50% 50%, #f4f2ea 0%, #c8c4b8 100%);
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0 8%, transparent 24%),
+    var(--c);
   box-shadow:
-    inset -3px -4px 6px rgba(0,0,0,0.28),
-    0 0 14px rgba(255,255,255,0.25),
-    4px 6px 10px rgba(0,0,0,0.4);
+    inset -3px -4px 6px rgba(0,0,0,0.45),
+    3px 5px 8px rgba(0,0,0,0.4);
+  animation: ballIdle 5.2s linear forwards;
 }
-.ball3d .num {
-  position: absolute; inset: 30%;
+.ibl.stripe {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.9) 0 7%, transparent 22%),
+    linear-gradient(180deg, #f5f5ee 0 26%, var(--c) 26% 74%, #f5f5ee 74%);
+}
+.ibl.cue {
+  z-index: 4;
+  width: 26px; height: 26px;
+  margin-left: -13px; margin-top: -13px;
+  background: radial-gradient(circle at 32% 28%, #fff 0, #f0f0ea 55%, #bdbdb4 100%);
+  box-shadow:
+    inset -3px -4px 6px rgba(0,0,0,0.25),
+    0 0 16px rgba(255,255,255,0.35),
+    3px 5px 8px rgba(0,0,0,0.45);
+  animation: cueFlight 5.2s cubic-bezier(0.35, 0.05, 0.25, 1) forwards;
+}
+.ibl.target {
+  z-index: 5;
+  animation: targetToPocket 5.2s cubic-bezier(0.25, 0.1, 0.2, 1) forwards;
+}
+.ibl.scatter {
+  animation: ballScatter 5.2s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+.ibl .num {
+  position: absolute;
+  inset: 28%;
   border-radius: 50%;
   background: #f4f4ee;
   color: #111;
-  font: 800 7px/1 var(--font);
+  font: 800 8px/1 var(--font);
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
 }
-.ball3d.cue .num { display: none; }
-.ball3d.sunk {
-  opacity: 0;
-  transform: scale(0.05);
-  transition: opacity 0.35s ease-in, transform 0.4s cubic-bezier(0.4,0,0.8,1);
-  pointer-events: none;
+.ibl.cue .num { display: none; }
+
+/* биток: стоит → удар в пирамиду → уходит в сторону */
+@keyframes cueFlight {
+  0%, 22% {
+    transform: translate3d(0, 0, 8px) scale(1);
+  }
+  28% {
+    transform: translate3d(var(--hit-x, 0px), var(--hit-y, -150px), 14px) scale(1.05);
+  }
+  38% {
+    transform: translate3d(calc(var(--hit-x, 0px) * 1.15), calc(var(--hit-y, -150px) * 1.05), 10px) scale(1);
+  }
+  55%, 100% {
+    transform: translate3d(calc(var(--hit-x, 0px) * 1.4 + 40px), calc(var(--hit-y, -150px) * 0.7), 4px) scale(0.95);
+    opacity: 0.85;
+  }
 }
 
-.intro-stick {
+/* целевой шар: из пирамиды в верхнюю-левую лузу */
+@keyframes targetToPocket {
+  0%, 26% {
+    transform: translate3d(0, 0, 6px) scale(1);
+    opacity: 1;
+  }
+  40% {
+    transform: translate3d(var(--mid-x, -30px), var(--mid-y, -40px), 12px) scale(1.02);
+  }
+  62% {
+    transform: translate3d(var(--dx), var(--dy), 20px) scale(0.92);
+    opacity: 1;
+  }
+  78% {
+    transform: translate3d(var(--dx), var(--dy), 8px) scale(0.45);
+    opacity: 0.7;
+  }
+  88%, 100% {
+    transform: translate3d(var(--dx), var(--dy), -20px) scale(0.08);
+    opacity: 0;
+  }
+}
+
+@keyframes ballScatter {
+  0%, 26% {
+    transform: translate3d(0, 0, 4px) rotate(0deg);
+    opacity: 1;
+  }
+  55% {
+    transform: translate3d(var(--dx), var(--dy), 10px) rotate(var(--rot));
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(var(--dx) * 1.05), calc(var(--dy) * 1.05), 2px) rotate(var(--rot));
+    opacity: 0.75;
+  }
+}
+@keyframes ballIdle {
+  0%, 100% { transform: translate3d(0,0,2px); }
+}
+
+/* кий */
+.istick {
   position: absolute;
-  width: 6px; height: 240px;
-  left: 50%; margin-left: -3px;
-  top: 380px;
-  border-radius: 3px;
+  left: 50%;
+  width: 7px; height: 260px;
+  margin-left: -3.5px;
+  border-radius: 4px;
   z-index: 3;
-  transform-origin: 50% 0%;
+  transform-origin: 50% 100%;
   background: linear-gradient(90deg, #e8c988, #8b5a2b 55%, #4a2e12);
-  box-shadow: 2px 4px 8px rgba(0,0,0,0.5);
+  box-shadow: 2px 4px 8px rgba(0,0,0,0.55);
   opacity: 0;
-  pointer-events: none;
+  animation: stickStrike 5.2s ease-in-out forwards;
+}
+@keyframes stickStrike {
+  0%, 12% {
+    opacity: 0;
+    top: -260px;
+    transform: translateY(-40px);
+  }
+  16% {
+    opacity: 1;
+    top: -260px;
+    transform: translateY(-28px);
+  }
+  24% {
+    opacity: 1;
+    top: -260px;
+    transform: translateY(2px);
+  }
+  28% {
+    opacity: 1;
+    top: -260px;
+    transform: translateY(-6px);
+  }
+  36%, 100% {
+    opacity: 0;
+    top: -260px;
+    transform: translateY(-10px);
+  }
 }
 
-.intro-vignette {
-  position: absolute; inset: 0; z-index: 15; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 45%, transparent 30%, rgba(0,0,0,0.55) 100%);
-}
+/* затемнение — камера «в лузе» */
 .intro-fade {
   position: absolute; inset: 0; z-index: 20;
   background: #000;
   opacity: 0;
   pointer-events: none;
+  animation: fadeToBlack 5.2s ease forwards;
 }
+@keyframes fadeToBlack {
+  0%, 72% { opacity: 0; }
+  86% { opacity: 0.55; }
+  96%, 100% { opacity: 1; }
+}
+
 .intro-title {
-  position: absolute; left: 0; right: 0; bottom: 12%; z-index: 25;
+  position: absolute; left: 0; right: 0; bottom: 13%;
+  z-index: 25;
   text-align: center; font-family: var(--serif);
   font-size: clamp(22px, 7vw, 34px); text-transform: uppercase;
   letter-spacing: 0.38em; text-indent: 0.38em;
   background: linear-gradient(180deg, #fff3cf 0%, #dcb96b 60%, #a37c36 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  opacity: 0; transition: opacity 0.6s ease, transform 0.6s ease;
-  transform: translateY(10px);
+  opacity: 0;
+  animation: titlePulse 5.2s ease forwards;
 }
 .intro-tag {
-  position: absolute; left: 0; right: 0; bottom: calc(12% - 28px); z-index: 25;
+  position: absolute; left: 0; right: 0; bottom: calc(13% - 28px);
+  z-index: 25;
   text-align: center; font-size: 11px; letter-spacing: 0.34em; text-indent: 0.34em;
   text-transform: uppercase; color: var(--text-dim);
-  opacity: 0; transition: opacity 0.6s ease;
+  opacity: 0;
+  animation: titlePulse 5.2s ease 0.15s forwards;
 }
-.intro-title.on, .intro-tag.on { opacity: 1; transform: none; }
-.intro-title.off, .intro-tag.off { opacity: 0; }
+@keyframes titlePulse {
+  0%, 8% { opacity: 0; transform: translateY(12px); }
+  18%, 70% { opacity: 1; transform: none; }
+  88%, 100% { opacity: 0; transform: translateY(-6px); }
+}
 .intro-skip {
   position: absolute; right: 16px; top: calc(14px + env(safe-area-inset-top));
   z-index: 30;
@@ -254,6 +400,7 @@ body {
   font-size: 11px; letter-spacing: 0.6px; cursor: pointer;
 }
 
+/* вход UI после интро */
 body:not(.ready) .home-header,
 body:not(.ready) .me-badge,
 body:not(.ready) .sport-card,
