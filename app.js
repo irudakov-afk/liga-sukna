@@ -193,11 +193,17 @@
     let rafId = null;
     let renderer = null;
 
+    // Проявляем весь экран целиком как единую группу (без поэтапного появления отдельных надписей)
     function setMenuOpacity(alpha) {
       const a = String(clamp(alpha, 0, 1));
       screens.forEach(s => {
         s.style.visibility = Number(a) > 0.01 ? 'visible' : 'hidden';
         s.style.opacity = a;
+        s.style.transition = 'none';
+        s.querySelectorAll('*').forEach(child => {
+          child.style.opacity = '';
+          child.style.transition = 'none';
+        });
       });
       if (Number(a) >= 0.99) {
         document.body.classList.add('ready');
@@ -334,33 +340,53 @@
         metalness: 0.1
       });
 
-      function createPocketWellTexture() {
+      // Текстура лузы: коричневатый край/верх, с глубиной уходящий в черноту
+      function createPocketGradientTexture() {
         const c = document.createElement('canvas');
         c.width = 256; c.height = 256;
         const ctx = c.getContext('2d');
-        const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+        const grad = ctx.createRadialGradient(128, 128, 12, 128, 128, 128);
         grad.addColorStop(0.0, '#020202');
-        grad.addColorStop(0.55, '#080504');
-        grad.addColorStop(0.85, '#1b0f08');
-        grad.addColorStop(1.0, '#2c170b');
+        grad.addColorStop(0.45, '#0b0604');
+        grad.addColorStop(0.78, '#2b1509');
+        grad.addColorStop(1.0, '#4a2611');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 256, 256);
         return new THREE.CanvasTexture(c);
       }
 
-      const pocketWellMat = new THREE.MeshStandardMaterial({
-        map: createPocketWellTexture(),
-        roughness: 0.85,
-        metalness: 0.05
+      // Текстура боковой стенки цилиндра лузы: сверху коричневатость, книзу уходит в черноту
+      function createPocketWallTexture() {
+        const c = document.createElement('canvas');
+        c.width = 64; c.height = 128;
+        const ctx = c.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, 128);
+        grad.addColorStop(0.0, '#44230f');
+        grad.addColorStop(0.45, '#241107');
+        grad.addColorStop(1.0, '#030303');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 128);
+        return new THREE.CanvasTexture(c);
+      }
+
+      const pocketGradMat = new THREE.MeshStandardMaterial({
+        map: createPocketGradientTexture(),
+        roughness: 0.72,
+        metalness: 0.08
+      });
+      const pocketWallMat = new THREE.MeshStandardMaterial({
+        map: createPocketWallTexture(),
+        roughness: 0.78,
+        metalness: 0.06,
+        side: THREE.DoubleSide
       });
 
-      // Цельные деревянные борта без разрывов, в местах луз суженные в сторону внешнего края
+      // Цельный деревянный борт по периметру
+      const outerW = TABLE_W + RAIL_W * 2;
+      const outerL = TABLE_L + RAIL_W * 2;
       const railY = RAIL_H / 2 - 0.08;
-      const narrowW = Math.max(0.45, RAIL_W - 0.38);
-      const shiftOut = 0.22;
 
-      function addRailBox(x, z, w, d, horizontal, dotsCount) {
-        if (w <= 0.02 || d <= 0.02) return;
+      function addOuterRail(x, z, w, d, horizontal, dotsCount) {
         const group = new THREE.Group();
         const wood = new THREE.Mesh(new THREE.BoxGeometry(w, RAIL_H, d), woodMat);
         wood.castShadow = true;
@@ -380,46 +406,61 @@
         scene.add(group);
       }
 
-      // Левый цельный борт (внешний край слева: сдвиг влево в зонах луз)
-      addRailBox(-HALF_W - RAIL_W / 2, 0, RAIL_W, TABLE_L + RAIL_W * 2, false, 6);
-      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut, 0, narrowW, 1.15, false, 0);
-      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut, -HALF_L + 0.62, narrowW, 1.24, false, 0);
-      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut,  HALF_L - 0.62, narrowW, 1.24, false, 0);
+      addOuterRail(-HALF_W - RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail( HALF_W + RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
+      addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
-      // Правый цельный борт (внешний край справа: сдвиг вправо в зонах луз)
-      addRailBox( HALF_W + RAIL_W / 2, 0, RAIL_W, TABLE_L + RAIL_W * 2, false, 6);
-      addRailBox( HALF_W + RAIL_W / 2 + shiftOut, 0, narrowW, 1.15, false, 0);
-      addRailBox( HALF_W + RAIL_W / 2 + shiftOut, -HALF_L + 0.62, narrowW, 1.24, false, 0);
-      addRailBox( HALF_W + RAIL_W / 2 + shiftOut,  HALF_L - 0.62, narrowW, 1.24, false, 0);
-
-      // Дальний и ближний цельные борта
-      addRailBox(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
-      addRailBox(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
-
-      // Полукруглые лузы (без цилиндров-стаканов сверху)
+      // Цилиндры луз на уровне деревянного борта с коричневым оттенком, уходящим в глубину в черноту
       const pocketDefs = [
-        { x: -HALF_W + 0.16, z: -HALF_L + 0.16, r: 0.64, arcStart: 0,             arcLen: Math.PI },
-        { x:  HALF_W - 0.16, z: -HALF_L + 0.16, r: 0.64, arcStart: Math.PI * 0.5, arcLen: Math.PI },
-        { x: -HALF_W + 0.16, z:  HALF_L - 0.16, r: 0.64, arcStart: -Math.PI * 0.5,arcLen: Math.PI },
-        { x:  HALF_W - 0.16, z:  HALF_L - 0.16, r: 0.64, arcStart: Math.PI,         arcLen: Math.PI },
-        { x: -HALF_W + 0.12, z: 0,              r: 0.58, arcStart: -Math.PI * 0.5,arcLen: Math.PI },
-        { x:  HALF_W - 0.12, z: 0,              r: 0.58, arcStart: Math.PI * 0.5, arcLen: Math.PI }
+        { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.68 },
+        { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.68 },
+        { x: -HALF_W + 0.08, z: 0,              r: 0.60 },
+        { x:  HALF_W - 0.08, z: 0,              r: 0.60 },
+        { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.68 },
+        { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.68 }
       ];
 
-      pocketDefs.forEach(pk => {
-        const halfCircleGeo = new THREE.CircleGeometry(pk.r, 32, pk.arcStart, pk.arcLen);
-        const well = new THREE.Mesh(halfCircleGeo, pocketWellMat);
-        well.rotation.x = -Math.PI / 2;
-        well.position.set(pk.x, 0.008, pk.z);
-        scene.add(well);
+      const cylinderTopY = railY + RAIL_H / 2; // ровно на уровне верхнего края деревянного борта
+      const cylinderH = cylinderTopY + 0.02;
 
+      pocketDefs.forEach(pk => {
+        // Боковая стенка цилиндра до уровня деревянного борта
+        const wallCyl = new THREE.Mesh(
+          new THREE.CylinderGeometry(pk.r, pk.r, cylinderH, 36, 1, true),
+          pocketWallMat
+        );
+        wallCyl.position.set(pk.x, cylinderH / 2 - 0.01, pk.z);
+        wallCyl.castShadow = true;
+        wallCyl.receiveShadow = true;
+        scene.add(wallCyl);
+
+        // Верхняя крышка цилиндра на уровне борта с градиентом от коричневого вглубь к чёрному
+        const topCap = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r, 36),
+          pocketGradMat
+        );
+        topCap.rotation.x = -Math.PI / 2;
+        topCap.position.set(pk.x, cylinderTopY + 0.002, pk.z);
+        topCap.receiveShadow = true;
+        scene.add(topCap);
+
+        // Дно лузы на уровне сукна
+        const baseWell = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r, 36),
+          pocketGradMat
+        );
+        baseWell.rotation.x = -Math.PI / 2;
+        baseWell.position.set(pk.x, 0.008, pk.z);
+        scene.add(baseWell);
+
+        // Кожаный ободок лузы
         const trim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r, 0.052, 12, 32, pk.arcLen),
+          new THREE.TorusGeometry(pk.r, 0.052, 12, 36),
           leatherMat
         );
         trim.rotation.x = Math.PI / 2;
-        trim.rotation.z = pk.arcStart;
-        trim.position.set(pk.x, 0.05, pk.z);
+        trim.position.set(pk.x, 0.052, pk.z);
         trim.castShadow = true;
         trim.receiveShadow = true;
         scene.add(trim);
@@ -453,7 +494,7 @@
       const cornerGapShort = 1.32;
       const endSegLen = TABLE_W - cornerGapShort * 2;
       addCushionSeg(0, -HALF_L + cushD / 2, endSegLen, true);
-      addCushionSeg(0,  HALF_L - cushD / 2, endSegLen, true);
+      addCushionSeg(0,  HALF_L + cushD / 2, endSegLen, true);
 
       // Шары
       function makeBallTexture(num, hexColor, isStripe) {
