@@ -713,16 +713,17 @@ pocketDefs.forEach(pk => {
           syncMeshes();
 
           const flyT = easeInOutSine(p);
+          const isPortrait = window.innerHeight > window.innerWidth;
+          const startX = isPortrait ? -1.6 : -1.1;
+          const startY = isPortrait ? 10.5 : 6.8;
+          const startZ = isPortrait ? 21.5 : 13.5;
+
+          const flyT = easeInOutSine(p);
           camPos.set(
-            THREE.MathUtils.lerp(-1.1, 0.0, flyT),
-            THREE.MathUtils.lerp(6.8, 2.5, flyT),
-            THREE.MathUtils.lerp(13.5, -8.5, flyT)
-          );
-          camLook.set(
-            THREE.MathUtils.lerp(0, 0, flyT),
-            THREE.MathUtils.lerp(0.25, 2.5, flyT),
-            THREE.MathUtils.lerp(-2.5, -13.5, flyT)
-          );
+          THREE.MathUtils.lerp(startX, 0.0, flyT),
+          THREE.MathUtils.lerp(startY, 2.5, flyT),
+          THREE.MathUtils.lerp(startZ, -5.5, flyT)
+);
 
           smoothedLook.lerp(camLook, 0.28);
           camera.position.copy(camPos);
