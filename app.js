@@ -381,112 +381,108 @@
         side: THREE.DoubleSide
       });
 
-      // Деревянный борт с вырезами под лузы (чтобы лунки были видны)
+      // Цельный деревянный борт по периметру
       const outerW = TABLE_W + RAIL_W * 2;
       const outerL = TABLE_L + RAIL_W * 2;
       const railY = RAIL_H / 2 - 0.08;
 
-      // Размеры вырезов под лузы
-      const cornerGap = 1.55;
-      const sideGap = 1.35;
-
-      function addRailSegment(x, z, w, d, horizontal, dotsCount) {
-        if (w < 0.05 || d < 0.05) return;
+      function addOuterRail(x, z, w, d, horizontal, dotsCount) {
         const group = new THREE.Group();
         const wood = new THREE.Mesh(new THREE.BoxGeometry(w, RAIL_H, d), woodMat);
         wood.castShadow = true;
         wood.receiveShadow = true;
         group.add(wood);
 
-        if (dotsCount > 0) {
-          for (let i = 1; i <= dotsCount; i++) {
-            const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
-            dot.position.y = RAIL_H / 2 + 0.01;
-            const frac = i / (dotsCount + 1);
-            if (horizontal) dot.position.x = -w / 2 + w * frac;
-            else dot.position.z = -d / 2 + d * frac;
-            group.add(dot);
-          }
+        for (let i = 1; i <= dotsCount; i++) {
+          const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
+          dot.position.y = RAIL_H / 2 + 0.01;
+          const frac = i / (dotsCount + 1);
+          if (horizontal) dot.position.x = -w / 2 + w * frac;
+          else dot.position.z = -d / 2 + d * frac;
+          group.add(dot);
         }
 
         group.position.set(x, railY, z);
         scene.add(group);
       }
 
-      // Боковые борты (вдоль Z) — сегменты с вырезами под угловые и боковые лузы
-      const sideWoodLen = HALF_L - cornerGap - sideGap / 2;
-      const sideCentersZ = [
-        -(sideGap / 2 + sideWoodLen / 2),
-        +(sideGap / 2 + sideWoodLen / 2)
-      ];
+      addOuterRail(-HALF_W - RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail( HALF_W + RAIL_W / 2, 0, RAIL_W, outerL, false, 6);
+      addOuterRail(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
+      addOuterRail(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
-      // Левый борт
-      addRailSegment(-HALF_W - RAIL_W / 2, sideCentersZ[0], RAIL_W, sideWoodLen, false, 3);
-      addRailSegment(-HALF_W - RAIL_W / 2, sideCentersZ[1], RAIL_W, sideWoodLen, false, 3);
-      // Правый борт
-      addRailSegment( HALF_W + RAIL_W / 2, sideCentersZ[0], RAIL_W, sideWoodLen, false, 3);
-      addRailSegment( HALF_W + RAIL_W / 2, sideCentersZ[1], RAIL_W, sideWoodLen, false, 3);
-
-      // Торцевые борты (вдоль X) — один сегмент между двумя угловыми лузами
-      const endWoodLen = TABLE_W - cornerGap * 2;
-      addRailSegment(0, -HALF_L - RAIL_W / 2, endWoodLen, RAIL_W, true, 3);
-      addRailSegment(0,  HALF_L + RAIL_W / 2, endWoodLen, RAIL_W, true, 3);
-
-      // Лунки подняты до уровня борта и стоят в вырезах
+      // Лунки на уровне сукна + полукруглый «рот» (челюсть) в деревянном борте
       const pocketDefs = [
-        { x: -HALF_W + 0.14, z: -HALF_L + 0.14, r: 0.68 },
-        { x:  HALF_W - 0.14, z: -HALF_L + 0.14, r: 0.68 },
-        { x: -HALF_W + 0.08, z: 0,              r: 0.60 },
-        { x:  HALF_W - 0.08, z: 0,              r: 0.60 },
-        { x: -HALF_W + 0.14, z:  HALF_L - 0.14, r: 0.68 },
-        { x:  HALF_W - 0.14, z:  HALF_L - 0.14, r: 0.68 }
+        { x: -HALF_W + 0.05, z: -HALF_L + 0.05, r: 0.72, corner: true,  rot: Math.PI * 0.25 },
+        { x:  HALF_W - 0.05, z: -HALF_L + 0.05, r: 0.72, corner: true,  rot: Math.PI * 0.75 },
+        { x: -HALF_W + 0.02, z: 0,              r: 0.62, corner: false, rot: Math.PI * 0.0  },
+        { x:  HALF_W - 0.02, z: 0,              r: 0.62, corner: false, rot: Math.PI * 1.0  },
+        { x: -HALF_W + 0.05, z:  HALF_L - 0.05, r: 0.72, corner: true,  rot: -Math.PI * 0.25 },
+        { x:  HALF_W - 0.05, z:  HALF_L - 0.05, r: 0.72, corner: true,  rot: -Math.PI * 0.75 }
       ];
-
-      const pocketTopY = railY + RAIL_H / 2 - 0.04;
-      const pocketRimY = pocketTopY;
-      const pocketWellBottom = 0.01;
 
       pocketDefs.forEach(pk => {
-        const wallH = Math.max(0.12, pocketTopY - 0.02);
-        // Боковая стенка цилиндра
-        const wallCyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r, pk.r * 0.92, wallH, 36, 1, true),
+        // Тёмное отверстие лузы на уровне сукна
+        const hole = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r * 0.92, 40),
+          pocketGradMat
+        );
+        hole.rotation.x = -Math.PI / 2;
+        hole.position.set(pk.x, 0.006, pk.z);
+        hole.receiveShadow = true;
+        scene.add(hole);
+
+        // Короткая стенка лузы, уходящая вниз
+        const well = new THREE.Mesh(
+          new THREE.CylinderGeometry(pk.r * 0.92, pk.r * 0.78, 0.18, 36, 1, true),
           pocketWallMat
         );
-        wallCyl.position.set(pk.x, pocketTopY - wallH / 2, pk.z);
-        wallCyl.castShadow = true;
-        wallCyl.receiveShadow = true;
-        scene.add(wallCyl);
+        well.position.set(pk.x, -0.07, pk.z);
+        well.castShadow = true;
+        well.receiveShadow = true;
+        scene.add(well);
 
-        // Верхняя «крышка» с градиентом (отверстие лузы)
-        const topCap = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.98, 36),
+        // Дно
+        const bottom = new THREE.Mesh(
+          new THREE.CircleGeometry(pk.r * 0.78, 32),
           pocketGradMat
         );
-        topCap.rotation.x = -Math.PI / 2;
-        topCap.position.set(pk.x, pocketTopY - 0.005, pk.z);
-        topCap.receiveShadow = true;
-        scene.add(topCap);
+        bottom.rotation.x = -Math.PI / 2;
+        bottom.position.set(pk.x, -0.155, pk.z);
+        scene.add(bottom);
 
-        // Дно лузы
-        const baseWell = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r * 0.9, 36),
-          pocketGradMat
-        );
-        baseWell.rotation.x = -Math.PI / 2;
-        baseWell.position.set(pk.x, pocketWellBottom, pk.z);
-        scene.add(baseWell);
-
-        // Кожаный ободок на уровне борта
-        const trim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r, 0.048, 12, 36),
+        // Кожаный ободок на уровне сукна
+        const leatherRim = new THREE.Mesh(
+          new THREE.TorusGeometry(pk.r * 0.95, 0.045, 10, 36),
           leatherMat
         );
-        trim.rotation.x = Math.PI / 2;
-        trim.position.set(pk.x, pocketRimY + 0.01, pk.z);
-        trim.castShadow = true;
-        trim.receiveShadow = true;
-        scene.add(trim);
+        leatherRim.rotation.x = Math.PI / 2;
+        leatherRim.position.set(pk.x, 0.028, pk.z);
+        leatherRim.castShadow = true;
+        leatherRim.receiveShadow = true;
+        scene.add(leatherRim);
+
+        // Полукруглый деревянный «рот» лузы (челюсть), сидит в борте
+        // Открытая часть цилиндра смотрит внутрь стола
+        const jawR = pk.r + 0.08;
+        const jawGeo = new THREE.CylinderGeometry(jawR, jawR, 0.22, 28, 1, true, 0, Math.PI);
+        const jaw = new THREE.Mesh(jawGeo, woodMat);
+        jaw.position.set(pk.x, 0.14, pk.z);
+        jaw.rotation.y = pk.rot;
+        jaw.castShadow = true;
+        jaw.receiveShadow = true;
+        scene.add(jaw);
+
+        // Верхняя кромка челюсти (тонкое кольцо)
+        const jawTop = new THREE.Mesh(
+          new THREE.TorusGeometry(jawR, 0.035, 8, 24, Math.PI),
+          woodMat
+        );
+        jawTop.rotation.x = Math.PI / 2;
+        jawTop.rotation.z = pk.rot;
+        jawTop.position.set(pk.x, 0.25, pk.z);
+        jawTop.castShadow = true;
+        scene.add(jawTop);
       });
 
       // Отбойники (cushions)
@@ -799,12 +795,12 @@
           const startY = isPortrait ? 10.2 : 6.8;
           const startZ = isPortrait ? 22.5 : 14.5;
 
-          // Конечная позиция: камера пролетает ближний борт
+          // Конечная позиция — камера пролетает ближний борт
           const endX = 0.0;
-          const endY = isPortrait ? 5.6 : 3.9;
-          const endZ = isPortrait ? -7.8 : -6.2;
-          const endLookY = isPortrait ? 1.6 : 1.8;
-          const endLookZ = isPortrait ? -16.5 : -14.8;
+          const endY = isPortrait ? 5.4 : 3.8;
+          const endZ = isPortrait ? -7.5 : -6.0;
+          const endLookY = isPortrait ? 1.5 : 1.7;
+          const endLookZ = isPortrait ? -16.0 : -14.5;
 
           const flyT = easeInOutSine(p);
           camPos.set(
@@ -822,7 +818,7 @@
           camera.position.copy(camPos);
           camera.lookAt(smoothedLook);
 
-          // Меню появляется только когда камера уже залетела за борт
+          // Меню появляется только в самом конце, когда камера уже за бортом
           if (p > 0.86) {
             const fadeT = clamp((p - 0.86) / 0.14, 0, 1);
             setMenuOpacity(fadeT);
