@@ -70,49 +70,59 @@ body {
   transform-style: preserve-3d;
   transform-origin: 50% 50%;
   will-change: transform;
+  /* тень «под столом» */
+  filter: drop-shadow(0 40px 60px rgba(0,0,0,0.65));
 }
+
 .intro-table3d {
   position: relative;
   width: 300px; height: 560px;
   border-radius: 30px;
   transform-style: preserve-3d;
-  background: linear-gradient(145deg, #6e4a24 0%, #3a2412 40%, #24160a 70%, #5c3d1e 100%);
+  background:
+    linear-gradient(145deg, #7a5528 0%, #4a2d15 35%, #2a1a0b 70%, #6b4820 100%);
   box-shadow:
     0 0 0 2px #120a04,
-    0 0 0 5px rgba(226, 194, 125, 0.28),
-    0 60px 90px rgba(0,0,0,0.8),
-    inset 0 2px 5px rgba(255,255,255,0.15);
+    0 0 0 6px rgba(226, 194, 125, 0.30),
+    0 0 0 8px rgba(0,0,0,0.55),
+    0 70px 100px rgba(0,0,0,0.85),
+    inset 0 3px 6px rgba(255,255,255,0.18),
+    inset 0 -6px 10px rgba(0,0,0,0.55);
 }
+
+/* Борта — с объёмной фаской */
 .intro-rail {
   position: absolute; z-index: 3; pointer-events: none;
-  background: linear-gradient(90deg, #5a3a1a, #8b6232 40%, #4a2e14);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  background:
+    linear-gradient(180deg, #a67840 0%, #7a5222 30%, #4a2e14 70%, #2a1a0a 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.22),
+    inset 0 -3px 6px rgba(0,0,0,0.5),
+    0 4px 8px rgba(0,0,0,0.45);
+  border-radius: 5px;
 }
-.intro-rail-t, .intro-rail-b {
-  left: 14px; right: 14px; height: 14px;
-  border-radius: 4px;
-}
-.intro-rail-t { top: 14px; }
-.intro-rail-b { bottom: 14px; }
+.intro-rail-t, .intro-rail-b { left: 12px; right: 12px; height: 16px; }
+.intro-rail-t { top: 12px; }
+.intro-rail-b { bottom: 12px; }
 .intro-rail-l, .intro-rail-r {
-  top: 14px; bottom: 14px; width: 14px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #5a3a1a, #8b6232 40%, #4a2e14);
+  top: 12px; bottom: 12px; width: 16px;
+  background: linear-gradient(90deg, #a67840 0%, #7a5222 30%, #4a2e14 70%, #2a1a0a 100%);
 }
-.intro-rail-l { left: 14px; }
-.intro-rail-r { right: 14px; }
+.intro-rail-l { left: 12px; }
+.intro-rail-r { right: 12px; }
 
 .intro-felt3d {
   position: absolute;
-  left: 28px; top: 28px; right: 28px; bottom: 28px;
+  left: 26px; top: 26px; right: 26px; bottom: 26px;
   border-radius: 8px;
-  overflow: hidden; /* шары не вылезают на борт */
+  overflow: hidden;
   transform-style: preserve-3d;
   background:
     radial-gradient(ellipse at 50% 32%, #2da066 0%, #176b42 52%, #0a3a24 100%);
   box-shadow:
-    inset 0 0 36px rgba(0,0,0,0.5),
-    inset 0 0 0 1px rgba(0,0,0,0.35);
+    inset 0 0 50px rgba(0,0,0,0.55),
+    inset 0 0 0 2px rgba(0,0,0,0.55),
+    inset 0 6px 14px rgba(0,0,0,0.35);
 }
 .intro-felt3d::after {
   content: '';
@@ -120,11 +130,15 @@ body {
   background: radial-gradient(ellipse at 50% 25%, rgba(255,255,220,0.14), transparent 55%);
 }
 
-.pocket {
   position: absolute; z-index: 1;
-  width: 32px; height: 32px; border-radius: 50%;
-  background: radial-gradient(circle at 50% 42%, #000 40%, #050505 100%);
-  box-shadow: inset 0 3px 8px #000, 0 0 0 1px rgba(20,12,6,0.9);
+  width: 34px; height: 34px; border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 38%, #000 0 30%, #040404 55%, #0a0806 100%);
+  box-shadow:
+    inset 0 6px 14px #000,
+    inset 0 -2px 4px rgba(255,255,255,0.04),
+    0 0 0 2px rgba(20,12,6,0.95),
+    0 0 10px rgba(0,0,0,0.6);
 }
 .pk-tl { left: -10px; top: -10px; }
 .pk-tr { right: -10px; top: -10px; }
@@ -139,8 +153,8 @@ body {
 /* 3D-шар: сфера из градиентов + блик + тень */
 .ball3d {
   position: absolute;
-  width: 26px; height: 26px;
-  margin-left: -13px; margin-top: -13px;
+  width: 22px; height: 22px;
+  margin-left: -11px; margin-top: -11px;
   border-radius: 50%;
   z-index: 2;
   transform: translate3d(0,0,0);
@@ -163,8 +177,8 @@ body {
 }
 .ball3d.cue {
   z-index: 4;
-  width: 28px; height: 28px;
-  margin-left: -14px; margin-top: -14px;
+  width: 24px; height: 24px;
+  margin-left: -12px; margin-top: -12px;
   background:
     radial-gradient(circle at 30% 26%, #fff 0 8%, transparent 24%),
     radial-gradient(circle at 50% 50%, #f4f2ea 0%, #c8c4b8 100%);
@@ -174,19 +188,20 @@ body {
     4px 6px 10px rgba(0,0,0,0.4);
 }
 .ball3d .num {
-  position: absolute; inset: 28%;
+  position: absolute; inset: 30%;
   border-radius: 50%;
   background: #f4f4ee;
   color: #111;
-  font: 800 8px/1 var(--font);
+  font: 800 7px/1 var(--font);
   display: flex; align-items: center; justify-content: center;
   pointer-events: none;
 }
 .ball3d.cue .num { display: none; }
 .ball3d.sunk {
   opacity: 0;
-  transform: scale(0.15);
-  transition: opacity 0.25s, transform 0.25s;
+  transform: scale(0.05);
+  transition: opacity 0.35s ease-in, transform 0.4s cubic-bezier(0.4,0,0.8,1);
+  pointer-events: none;
 }
 
 .intro-stick {
