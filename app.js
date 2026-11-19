@@ -29,18 +29,18 @@
 
   let tgUser = null;
   let lobby = null, lobbyId = null, lobbyVersion = 0;
-  let state = null;                 // состояние турнира (из lobby.tournament)
+  let state = null;
   let selectedSport = 'american';
   let selectedFormat = 'free';
   let current = 'home';
   let userNavigated = false;
   let pollTimer = null, pollBusy = false, busy = 0;
   let pairPick = [];
-  let playersCache = {};            // telegramId -> игрок из бота (фото, имя)
+  let playersCache = {};
   let rosterList = [];
   let statsData = null;
   let tFinishing = false;
-  const shown = {};                 // lobbyId -> итоги уже показаны
+  const shown = {};
 
   /* ---------- утилиты ---------- */
   function $(id) { return document.getElementById(id); }
@@ -354,114 +354,75 @@
         metalness: 0.05
       });
 
-      // 6 луз: полные круги со сдвигом внутрь, чтобы не обрезались краем стола
-      const pocketDefs = [
-        { x: -HALF_W + 0.36, z: -HALF_L + 0.36, r: 0.62 },
-        { x:  HALF_W - 0.36, z: -HALF_L + 0.36, r: 0.62 },
-        { x: -HALF_W + 0.32, z: 0,              r: 0.58 },
-        { x:  HALF_W - 0.32, z: 0,              r: 0.58 },
-        { x: -HALF_W + 0.36, z:  HALF_L - 0.36, r: 0.62 },
-        { x:  HALF_W - 0.36, z:  HALF_L - 0.36, r: 0.62 }
-      ];
+      // Цельные деревянные борта без разрывов, в местах луз суженные в сторону внешнего края
+      const railY = RAIL_H / 2 - 0.08;
+      const narrowW = Math.max(0.45, RAIL_W - 0.38);
+      const shiftOut = 0.22;
 
-      // Единый деревянный борт по периметру, но в зонах луз верхний объём "стёрт" (опущен до уровня сукна)
-      const fullH = RAIL_H;
-      const erasedH = 0.02;
-
-      function addRailSegment(x, z, w, d, h, horizontal, dotsCount) {
+      function addRailBox(x, z, w, d, horizontal, dotsCount) {
         if (w <= 0.02 || d <= 0.02) return;
         const group = new THREE.Group();
-        const wood = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), woodMat);
+        const wood = new THREE.Mesh(new THREE.BoxGeometry(w, RAIL_H, d), woodMat);
         wood.castShadow = true;
         wood.receiveShadow = true;
         group.add(wood);
 
-        if (h >= fullH * 0.8 && dotsCount > 0) {
-          for (let i = 1; i <= dotsCount; i++) {
-            const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
-            dot.position.y = h / 2 + 0.01;
-            const frac = i / (dotsCount + 1);
-            if (horizontal) dot.position.x = -w / 2 + w * frac;
-            else dot.position.z = -d / 2 + d * frac;
-            group.add(dot);
-          }
+        for (let i = 1; i <= dotsCount; i++) {
+          const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), goldMat);
+          dot.position.y = RAIL_H / 2 + 0.01;
+          const frac = i / (dotsCount + 1);
+          if (horizontal) dot.position.x = -w / 2 + w * frac;
+          else dot.position.z = -d / 2 + d * frac;
+          group.add(dot);
         }
 
-        group.position.set(x, h / 2 - 0.08, z);
+        group.position.set(x, railY, z);
         scene.add(group);
       }
 
-      const cornerZone = 1.45;
-      const sideZone = 1.25;
-      const longPartLen = Math.max(0.05, HALF_L - cornerZone - sideZone / 2);
-      const longPartZ1 = -(sideZone / 2 + longPartLen / 2);
-      const longPartZ2 = +(sideZone / 2 + longPartLen / 2);
+      // Левый цельный борт (внешний край слева: сдвиг влево в зонах луз)
+      addRailBox(-HALF_W - RAIL_W / 2, 0, RAIL_W, TABLE_L + RAIL_W * 2, false, 6);
+      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut, 0, narrowW, 1.15, false, 0);
+      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut, -HALF_L + 0.62, narrowW, 1.24, false, 0);
+      addRailBox(-HALF_W - RAIL_W / 2 - shiftOut,  HALF_L - 0.62, narrowW, 1.24, false, 0);
 
-      [-HALF_W - RAIL_W / 2, HALF_W + RAIL_W / 2].forEach(rx => {
-        addRailSegment(rx, -HALF_L + cornerZone / 2, RAIL_W, cornerZone, erasedH, false, 0);
-        addRailSegment(rx, longPartZ1, RAIL_W, longPartLen, fullH, false, 3);
-        addRailSegment(rx, 0, RAIL_W, sideZone, erasedH, false, 0);
-        addRailSegment(rx, longPartZ2, RAIL_W, longPartLen, fullH, false, 3);
-        addRailSegment(rx, HALF_L - cornerZone / 2, RAIL_W, cornerZone, erasedH, false, 0);
-      });
+      // Правый цельный борт (внешний край справа: сдвиг вправо в зонах луз)
+      addRailBox( HALF_W + RAIL_W / 2, 0, RAIL_W, TABLE_L + RAIL_W * 2, false, 6);
+      addRailBox( HALF_W + RAIL_W / 2 + shiftOut, 0, narrowW, 1.15, false, 0);
+      addRailBox( HALF_W + RAIL_W / 2 + shiftOut, -HALF_L + 0.62, narrowW, 1.24, false, 0);
+      addRailBox( HALF_W + RAIL_W / 2 + shiftOut,  HALF_L - 0.62, narrowW, 1.24, false, 0);
 
-      const shortPartLen = Math.max(0.05, TABLE_W - cornerZone * 2);
-      [-HALF_L - RAIL_W / 2, HALF_L + RAIL_W / 2].forEach(rz => {
-        addRailSegment(-HALF_W - RAIL_W / 2, rz, RAIL_W, RAIL_W, fullH, true, 0);
-        addRailSegment(-HALF_W + cornerZone / 2, rz, cornerZone, RAIL_W, erasedH, true, 0);
-        addRailSegment(0, rz, shortPartLen, RAIL_W, fullH, true, 2);
-        addRailSegment(HALF_W - cornerZone / 2, rz, cornerZone, RAIL_W, erasedH, true, 0);
-        addRailSegment(HALF_W + RAIL_W / 2, rz, RAIL_W, RAIL_W, fullH, true, 0);
-      });
+      // Дальний и ближний цельные борта
+      addRailBox(0, -HALF_L - RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
+      addRailBox(0,  HALF_L + RAIL_W / 2, TABLE_W, RAIL_W, true, 3);
 
-      // Прозрачные цилиндры над каждой лузой (визуальный воздух над лункой)
-      const pillarMat = new THREE.MeshBasicMaterial({
-        color: 0xa8f0cf,
-        transparent: true,
-        opacity: 0.1,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      });
-      const pillarRingMat = new THREE.MeshBasicMaterial({
-        color: 0xdffaf0,
-        transparent: true,
-        opacity: 0.3
-      });
+      // Полукруглые лузы (без цилиндров-стаканов сверху)
+      const pocketDefs = [
+        { x: -HALF_W + 0.16, z: -HALF_L + 0.16, r: 0.64, arcStart: 0,             arcLen: Math.PI },
+        { x:  HALF_W - 0.16, z: -HALF_L + 0.16, r: 0.64, arcStart: Math.PI * 0.5, arcLen: Math.PI },
+        { x: -HALF_W + 0.16, z:  HALF_L - 0.16, r: 0.64, arcStart: -Math.PI * 0.5,arcLen: Math.PI },
+        { x:  HALF_W - 0.16, z:  HALF_L - 0.16, r: 0.64, arcStart: Math.PI,         arcLen: Math.PI },
+        { x: -HALF_W + 0.12, z: 0,              r: 0.58, arcStart: -Math.PI * 0.5,arcLen: Math.PI },
+        { x:  HALF_W - 0.12, z: 0,              r: 0.58, arcStart: Math.PI * 0.5, arcLen: Math.PI }
+      ];
 
       pocketDefs.forEach(pk => {
-        const well = new THREE.Mesh(
-          new THREE.CircleGeometry(pk.r, 36),
-          pocketWellMat
-        );
+        const halfCircleGeo = new THREE.CircleGeometry(pk.r, 32, pk.arcStart, pk.arcLen);
+        const well = new THREE.Mesh(halfCircleGeo, pocketWellMat);
         well.rotation.x = -Math.PI / 2;
         well.position.set(pk.x, 0.008, pk.z);
         scene.add(well);
 
         const trim = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r, 0.055, 14, 36),
+          new THREE.TorusGeometry(pk.r, 0.052, 12, 32, pk.arcLen),
           leatherMat
         );
         trim.rotation.x = Math.PI / 2;
-        trim.position.set(pk.x, 0.055, pk.z);
+        trim.rotation.z = pk.arcStart;
+        trim.position.set(pk.x, 0.05, pk.z);
         trim.castShadow = true;
         trim.receiveShadow = true;
         scene.add(trim);
-
-        const pillarH = 1.45;
-        const pillar = new THREE.Mesh(
-          new THREE.CylinderGeometry(pk.r, pk.r, pillarH, 36, 1, true),
-          pillarMat
-        );
-        pillar.position.set(pk.x, pillarH / 2, pk.z);
-        scene.add(pillar);
-
-        const topRing = new THREE.Mesh(
-          new THREE.TorusGeometry(pk.r, 0.014, 10, 36),
-          pillarRingMat
-        );
-        topRing.rotation.x = Math.PI / 2;
-        topRing.position.set(pk.x, pillarH, pk.z);
-        scene.add(topRing);
       });
 
       // Отбойники (cushions)
@@ -480,8 +441,8 @@
         scene.add(seg);
       }
 
-      const halfSideGap = 0.88;
-      const cornerGapLong = 1.42;
+      const halfSideGap = 0.78;
+      const cornerGapLong = 1.28;
       const sideHalfLen = HALF_L - cornerGapLong - halfSideGap;
 
       addCushionSeg(-HALF_W + cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
@@ -489,7 +450,7 @@
       addCushionSeg( HALF_W - cushD / 2, -(halfSideGap + sideHalfLen / 2), sideHalfLen, false);
       addCushionSeg( HALF_W - cushD / 2,  (halfSideGap + sideHalfLen / 2), sideHalfLen, false);
 
-      const cornerGapShort = 1.48;
+      const cornerGapShort = 1.32;
       const endSegLen = TABLE_W - cornerGapShort * 2;
       addCushionSeg(0, -HALF_L + cushD / 2, endSegLen, true);
       addCushionSeg(0,  HALF_L - cushD / 2, endSegLen, true);
@@ -774,7 +735,6 @@
           const startY = isPortrait ? 10.2 : 6.8;
           const startZ = isPortrait ? 22.5 : 14.5;
 
-          // Движение вперёд без "нырка" в стол: высота держится выше поверхности стола
           const flyT = easeInOutSine(p);
           camPos.set(
             THREE.MathUtils.lerp(startX, 0.0, flyT),
@@ -791,7 +751,6 @@
           camera.position.copy(camPos);
           camera.lookAt(smoothedLook);
 
-          // Плавное проявление меню в конце анимации
           if (p > 0.78) {
             const fadeT = clamp((p - 0.78) / 0.22, 0, 1);
             setMenuOpacity(fadeT);
