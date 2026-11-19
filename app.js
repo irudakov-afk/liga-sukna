@@ -441,7 +441,7 @@
           pocketGradMat
         );
         topCap.rotation.x = -Math.PI / 2;
-        topCap.position.set(pk.x, 0.062, pk.z);
+        topCap.position.set(pk.x, 0.5, pk.z);
         topCap.receiveShadow = true;
         scene.add(topCap);
 
