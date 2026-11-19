@@ -29,18 +29,18 @@
 
   let tgUser = null;
   let lobby = null, lobbyId = null, lobbyVersion = 0;
-  let state = null;                 // состояние турнира (из lobby.tournament)
+  let state = null;
   let selectedSport = 'american';
   let selectedFormat = 'free';
   let current = 'home';
   let userNavigated = false;
   let pollTimer = null, pollBusy = false, busy = 0;
   let pairPick = [];
-  let playersCache = {};            // telegramId -> игрок из бота (фото, имя)
+  let playersCache = {};
   let rosterList = [];
   let statsData = null;
   let tFinishing = false;
-  const shown = {};                 // lobbyId -> итоги уже показаны
+  const shown = {};
 
   /* ---------- утилиты ---------- */
   function $(id) { return document.getElementById(id); }
@@ -57,8 +57,6 @@
   function initial(n) { return String(n || '?').trim().slice(0, 1).toUpperCase(); }
   function pct(w, g) { return g > 0 ? Math.round((w / g) * 100) : 0; }
   function sportName(id) { const s = SPORTS.find(x => x.id === id); return s ? s.name : 'Бильярд'; }
-  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-  function rnd(a, b) { return a + Math.random() * (b - a); }
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -178,8 +176,129 @@
     });
   }
 
-  /* ---------- интро: камера плавно в центр стола ---------- */
-  function buildIntro() { /* сцена собирается в runIntro */ }
+  /* =====================================================
+     ИНТРО — чистая CSS-анимация.
+     JS только собирает шары в #intro-felt и вешает skip.
+     Вся тайм-линия — в CSS (camSequence, cueFlight, targetToPocket и т.д.).
+     ===================================================== */
+  function buildIntroBalls() {
+    const felt = $('intro-felt');
+    if (!felt) return;
+    // если уже собрано — не дублируем (на случай повторного вызова)
+    if (felt.querySelector('.ibl')) return;
+
+    const FW = felt.clientWidth || 240;
+    const FH = felt.clientHeight || 480;
+
+    // Раскладка: пирамида из 15 шаров, центр по X, чуть выше центра по Y.
+    // felt внутри таблицы 280x520 с рамой 20px → клиентские ~240x480.
+    const R = 12;                 // радиус шара (24px)
+    const D = 24;                 // дистанция в пирамиде
+    const rackCx = FW * 0.5;
+    const rackCy = FH * 0.28;     // пирамида ближе к верху, биток снизу — стандарт
+    const cueCx = FW * 0.5;
+    const cueCy = FH * 0.78;
+
+    // Левый верхний карман в координатах felt:
+    //   .ipk.p1 имеет left:-12px; top:-12px; width:34px → центр ~ (5, 5)
+    // целевой шар должен «уехать» в него из пирамиды
+    const pocketX = 5, pocketY = 5;
+
+    function addBall(opts) {
+      const el = document.createElement('div');
+      el.className = 'ibl';
+      if (opts.stripe) el.classList.add('stripe');
+      if (opts.cue) el.classList.add('cue');
+      if (opts.target) el.classList.add('target');
+      if (opts.scatter) el.classList.add('scatter');
+      el.style.setProperty('--c', opts.color);
+      el.style.left = opts.x + 'px';
+      el.style.top = opts.y + 'px';
+      if (opts.dx != null) el.style.setProperty('--dx', opts.dx + 'px');
+      if (opts.dy != null) el.style.setProperty('--dy', opts.dy + 'px');
+      if (opts.midX != null) el.style.setProperty('--mid-x', opts.midX + 'px');
+      if (opts.midY != null) el.style.setProperty('--mid-y', opts.midY + 'px');
+      if (opts.rot != null) el.style.setProperty('--rot', opts.rot + 'deg');
+      // цифра
+      if (opts.num != null && !opts.cue) {
+        const n = document.createElement('span');
+        n.className = 'num';
+        n.textContent = String(opts.num);
+        // в CSS для .ibl .num отдельного правила нет — добавим инлайн
+        n.style.cssText = 'position:absolute;inset:28%;border-radius:50%;background:#f4f4ee;color:#111;' +
+                          'font:800 8px/1 var(--font);display:flex;align-items:center;justify-content:center;pointer-events:none;';
+        el.appendChild(n);
+      }
+      felt.appendChild(el);
+      return el;
+    }
+
+    const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
+
+    // Пируем пирамиду. Один из шаров — целевой (уедет в верхнюю-левую лузу).
+    let idx = 0;
+    let targetIdx = 9; // 3-й ряд, крайний левый (примерно), удобно для дуги в угол
+    for (let r = 0; r < 5; r++) {
+      for (let k = 0; k <= r; k++, idx++) {
+        const x = rackCx + (k - r / 2) * D;
+        const y = rackCy - r * (D * 0.86);
+        const isTarget = idx === targetIdx;
+        const num = idx === 4 ? 8 : (idx % 7) + 1;
+
+        // стартовые смещения для CSS-анимации
+        // dx/dy считаем от стартовой точки — целевой шар должен прийти в карман.
+        let dx = 0, dy = 0, midX = 0, midY = 0, rot = 0;
+
+        if (isTarget) {
+          // из своей стартовой позиции в левую-верхнюю лузу
+          dx = pocketX - x;
+          dy = pocketY - y;
+          // дуга: промежуточная точка чуть правее прямой
+          midX = dx * 0.55 + 18;
+          midY = dy * 0.55 - 8;
+        } else {
+          // разлёт «в стороны» + лёгкое смещение от центра пирамиды
+          const ang = Math.atan2(y - rackCy, x - rackCx) + (Math.random() - 0.5) * 0.8;
+          const dist = 30 + Math.random() * 30;
+          dx = Math.cos(ang) * dist;
+          dy = Math.sin(ang) * dist - 10;
+          rot = (Math.random() * 2 - 1) * 60;
+        }
+
+        addBall({
+          x: x, y: y,
+          color: idx === 4 ? '#151515' : colors[idx % 7],
+          stripe: idx >= 8,
+          num: num,
+          target: isTarget,
+          scatter: !isTarget,
+          dx: dx, dy: dy, midX: midX, midY: midY, rot: rot
+        });
+      }
+    }
+
+    // Биток
+    // Импульс: в сторону пирамиды (к rackCx, rackCy), плюс отклонение вправо-вверх,
+    // чтобы он «выскочил» из кадра (как в CSS — он уходит за пирамиду).
+    const vx = rackCx - cueCx;
+    const vy = rackCy - cueCy;
+    const vlen = Math.sqrt(vx * vx + vy * vy) || 1;
+    const hitX = (vx / vlen) * 150;      // вперёд к пирамиде
+    const hitY = (vy / vlen) * 150;
+    addBall({
+      x: cueCx, y: cueCy,
+      color: '#f4f2ea',
+      cue: true,
+      // биток: после удара уходит вправо-вверх
+      dx: hitX, dy: hitY
+    });
+    // для cueFlight CSS ожидает --hit-x/--hit-y (см. .ibl.cue keyframes)
+    const cueEl = felt.querySelector('.ibl.cue');
+    if (cueEl) {
+      cueEl.style.setProperty('--hit-x', (hitX + 30) + 'px');
+      cueEl.style.setProperty('--hit-y', (hitY - 20) + 'px');
+    }
+  }
 
   function runIntro() {
     const root = $('intro');
@@ -190,312 +309,40 @@
       return;
     }
 
-    const scene = $('intro-scene');
-    const felt = $('intro-felt');
-    const stick = $('intro-stick');
-    const fade = $('intro-fade');
-    const title = root.querySelector('.intro-title');
-    const tag = root.querySelector('.intro-tag');
-    if (!scene || !felt) {
-      document.body.classList.add('ready');
-      root.remove();
-      return;
-    }
+    // 1) собираем шары — CSS-анимации подхватят их автоматически
+    buildIntroBalls();
 
-    const FW = felt.clientWidth || 244;
-    const FH = felt.clientHeight || 504;
-    const R = 11;               // радиус шара (22px)
-    const POCKET_R = 17;        // радиус, при котором шар «проваливается»
-    const minX = R + 2;
-    const maxX = FW - R - 2;
-    const minY = R + 2;
-    const maxY = FH - R - 2;
-
-    function clampBall(x, y) {
-      return {
-        x: Math.max(minX, Math.min(maxX, x)),
-        y: Math.max(minY, Math.min(maxY, y))
-      };
-    }
-
-    const colors = ['#f4c20d', '#1f5fd0', '#d3281f', '#5d2d91', '#f0701a', '#1b8a42', '#8a2323'];
-    const D = 22;               // дистанция в пирамиде под новый радиус
-    const rackCx = FW * 0.5;
-    const rackCy = FH * 0.32;
-    const cueStart = { x: FW * 0.5, y: FH * 0.72 };
-    // цель — верхняя левая луза (чуть внутри сукна, потом уход в карман)
-    const pocket = { x: 10, y: 10 };
-
-    const balls = [];
-
-    function makeBall(opts) {
-      const el = document.createElement('div');
-      el.className = 'ball3d' + (opts.stripe ? ' stripe' : '') + (opts.cue ? ' cue' : '');
-      el.style.setProperty('--c', opts.color || '#ccc');
-      if (opts.num != null && !opts.cue) {
-        const n = document.createElement('span');
-        n.className = 'num';
-        n.textContent = String(opts.num);
-        el.appendChild(n);
-      }
-      felt.appendChild(el);
-      const b = {
-        el: el,
-        x: opts.x, y: opts.y,
-        vx: 0, vy: 0,
-        cue: !!opts.cue,
-        target: !!opts.target,
-        sunk: false,
-        color: opts.color
-      };
-      balls.push(b);
-      return b;
-    }
-
-    // пирамида
-    let idx = 0;
-    let targetBall = null;
-    for (let r = 0; r < 5; r++) {
-      for (let k = 0; k <= r; k++, idx++) {
-        const x = rackCx + (k - r / 2) * D;
-        const y = rackCy - r * (D * 0.86);
-        const isTarget = (r === 2 && k === 0);
-        const b = makeBall({
-          x: x, y: y,
-          color: idx === 4 ? '#151515' : colors[idx % 7],
-          stripe: idx >= 8,
-          num: idx === 4 ? 8 : (idx % 7) + 1,
-          target: isTarget
-        });
-        if (isTarget) targetBall = b;
-      }
-    }
-    const cueBall = makeBall({
-      x: cueStart.x, y: cueStart.y,
-      color: '#f4f2ea', cue: true
-    });
-
-    function placeBalls() {
-      balls.forEach(b => {
-        if (b.sunk) return;
-        const p = clampBall(b.x, b.y);
-        b.x = p.x; b.y = p.y;
-        b.el.style.left = b.x + 'px';
-        b.el.style.top = b.y + 'px';
-      });
-    }
-    placeBalls();
-
-    // камера
-    const cam = {
-      x: 40, y: 120, z: -1400,
-      rotX: 70, rotZ: -32, scale: 0.5
-    };
-
-    function applyCam() {
-      scene.style.transform =
-        'translate3d(' + cam.x.toFixed(2) + 'px,' + cam.y.toFixed(2) + 'px,' + cam.z.toFixed(2) + 'px) ' +
-        'rotateX(' + cam.rotX.toFixed(2) + 'deg) rotateZ(' + cam.rotZ.toFixed(2) + 'deg) scale(' + cam.scale.toFixed(3) + ')';
-    }
-    applyCam();
-
-    function easeInOut(t) {
-      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    }
-    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
-    function easeIn(t) { return t * t * t; }
-    function lerp(a, b, t) { return a + (b - a) * t; }
-
-    // фазы
-    const T_APPROACH = 1.6;
-    const T_SHOT     = 2.0;
-    const T_BREAK    = 2.6;
-    const T_SETTLE   = 4.6;
-    const T_END      = 5.0;
-
-    let started = false;
-    let shotDone = false;
-    let ended = false;
-    let raf = 0;
-    let t0 = 0;
-
-    function endIntro(fast) {
-      if (ended) return;
-      ended = true;
-      if (raf) cancelAnimationFrame(raf);
-      root.classList.add(fast ? 'skip' : 'done');
-      if (fade) fade.style.opacity = '1';
+    // 2) завершение: после CSS-анимации (5.2s) или клика
+    let finished = false;
+    function finish(skip) {
+      if (finished) return;
+      finished = true;
+      if (skip) root.classList.add('skip');
+      else root.classList.add('done');
       document.body.classList.add('ready');
       setTimeout(function () {
         try { root.remove(); } catch (e) {}
-      }, fast ? 350 : 180);
+      }, skip ? 320 : 260);
     }
 
-    function fireShot() {
-      if (shotDone) return;
-      shotDone = true;
-      const dx = rackCx - cueBall.x;
-      const dy = rackCy - cueBall.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      cueBall.vx = (dx / len) * 920;
-      cueBall.vy = (dy / len) * 920;
+    // основной таймер (CSS .intro-fade заканчивается на 5.2s)
+    setTimeout(function () { finish(false); }, 5300);
 
-      balls.forEach(b => {
-        if (b.cue || b.sunk) return;
-        if (b.target) {
-          const tx = pocket.x - b.x;
-          const ty = pocket.y - b.y;
-          const tl = Math.sqrt(tx * tx + ty * ty) || 1;
-          b.vx = (tx / tl) * 380;
-          b.vy = (ty / tl) * 380;
-        } else {
-          const ang = Math.atan2(b.y - rackCy, b.x - rackCx) + (Math.random() - 0.5) * 0.9;
-          const sp = 120 + Math.random() * 220;
-          b.vx = Math.cos(ang) * sp;
-          b.vy = Math.sin(ang) * sp - 40;
-        }
-      });
-
-      if (stick) {
-        stick.style.opacity = '0';
-        stick.style.transition = 'opacity 0.25s';
-      }
-      const pk = felt.querySelector('.pk-tl');
-      if (pk) pk.classList.add('hot');
-    }
-
-    function stepPhysics(dt) {
-      const friction = Math.pow(0.985, dt * 60);
-      balls.forEach(b => {
-        if (b.sunk) return;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.vx *= friction;
-        b.vy *= friction;
-
-        // удержание на сукне
-        if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * 0.35; }
-        if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * 0.35; }
-        if (b.y < minY) { b.y = minY; b.vy = Math.abs(b.vy) * 0.35; }
-        if (b.y > maxY) { b.y = maxY; b.vy = -Math.abs(b.vy) * 0.35; }
-
-        // целевой шар: притягиваем к лузе, затем утапливаем
-        if (b.target) {
-          const ddx = b.x - pocket.x;
-          const ddy = b.y - pocket.y;
-          const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-
-          if (dist < 48) {
-            b.vx += (-ddx) * 14 * dt * 60;
-            b.vy += (-ddy) * 14 * dt * 60;
-          }
-
-          if (dist < POCKET_R) {
-            b.sunk = true;
-            b.x = pocket.x;
-            b.y = pocket.y;
-            b.el.style.left = b.x + 'px';
-            b.el.style.top = b.y + 'px';
-            // rAF — чтобы left/top успели примениться до анимации
-            requestAnimationFrame(function () {
-              b.el.classList.add('sunk');
-            });
-          }
-        }
-      });
-
-      // мягкие столкновения
-      for (let i = 0; i < balls.length; i++) {
-        for (let j = i + 1; j < balls.length; j++) {
-          const a = balls[i], c = balls[j];
-          if (a.sunk || c.sunk) continue;
-          let dx = c.x - a.x, dy = c.y - a.y;
-          let dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-          const minD = R * 2;
-          if (dist < minD) {
-            const nx = dx / dist, ny = dy / dist;
-            const overlap = (minD - dist) * 0.5;
-            a.x -= nx * overlap; a.y -= ny * overlap;
-            c.x += nx * overlap; c.y += ny * overlap;
-            const dvx = a.vx - c.vx, dvy = a.vy - c.vy;
-            const impact = dvx * nx + dvy * ny;
-            if (impact > 0) {
-              a.vx -= impact * nx * 0.85;
-              a.vy -= impact * ny * 0.85;
-              c.vx += impact * nx * 0.85;
-              c.vy += impact * ny * 0.85;
-            }
-          }
-        }
-      }
-      placeBalls();
-    }
-
-    // Единственная функция камеры: плавный наезд на центр стола
-    function setCamCenter(u) {
-      const t = easeInOut(Math.max(0, Math.min(1, u)));
-      cam.x = lerp(40, 0, t);
-      cam.y = lerp(120, 0, t);
-      cam.z = lerp(-1400, -80, t);
-      cam.rotX = lerp(70, 50, t);
-      cam.rotZ = lerp(-32, 0, t);
-      cam.scale = lerp(0.5, 1.25, t);
-    }
-
-    function frame(now) {
-      if (ended) return;
-      if (!started) { started = true; t0 = now; }
-      const t = (now - t0) / 1000;
-      const dt = Math.min(0.033, 0.016);
-
-      // кий
-      if (stick && t < T_SHOT) {
-        if (t > 1.15 && t < T_SHOT) {
-          stick.style.opacity = '1';
-          const pull = t < 1.55 ? easeOut((t - 1.15) / 0.4) : easeIn((T_SHOT - t) / 0.5);
-          const yOff = t < 1.55 ? lerp(36, 8, pull) : lerp(8, -4, 1 - (T_SHOT - t) / 0.5);
-          stick.style.transform = 'translateY(' + yOff + 'px)';
-          stick.style.top = (cueBall.y + 30) + 'px';
-          stick.style.left = cueBall.x + 'px';
-        }
-      }
-
-      if (t >= T_APPROACH && !shotDone) fireShot();
-      if (t >= T_APPROACH) stepPhysics(dt);
-
-      // камера: до T_BREAK — начало наезда, дальше — до T_SETTLE
-      if (t < T_BREAK) {
-        setCamCenter(Math.min(0.35, t / T_BREAK));
-      } else {
-        setCamCenter(0.35 + 0.65 * Math.min(1, (t - T_BREAK) / (T_SETTLE - T_BREAK)));
-      }
-      applyCam();
-
-      // титры
-      if (title && tag) {
-        if (t > 0.4 && t < 3.8) {
-          title.classList.add('on'); tag.classList.add('on');
-          title.classList.remove('off'); tag.classList.remove('off');
-        } else if (t >= 3.8) {
-          title.classList.add('off'); tag.classList.add('off');
-        }
-      }
-
-      if (t >= T_END) {
-        endIntro(false);
-        return;
-      }
-      raf = requestAnimationFrame(frame);
-    }
-
+    // клик / кнопка skip
     const skip = $('intro-skip');
-    if (skip) skip.addEventListener('click', function (e) {
-      e.stopPropagation();
-      endIntro(true);
-    });
-    root.addEventListener('click', function () { endIntro(true); });
+    if (skip) {
+      skip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finish(true);
+      });
+    }
+    root.addEventListener('click', function () { finish(true); });
 
-    raf = requestAnimationFrame(frame);
+    // на всякий случай — если CSS анимация закончилась раньше (анимация title)
+    const fade = root.querySelector('.intro-fade');
+    if (fade) {
+      fade.addEventListener('animationend', function () { finish(false); }, { once: true });
+    }
   }
 
   /* ---------- главная ---------- */
@@ -1465,7 +1312,6 @@
 
   /* ---------- запуск ---------- */
   function boot() {
-    buildIntro();
     runIntro();
     initTelegram();
     renderHome();
